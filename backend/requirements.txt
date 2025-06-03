@@ -3,3 +3,4 @@ flask-bcrypt
 flask-sqlalchemy
 flask-cors
 flask-login
+cryptography
