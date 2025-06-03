@@ -1,6 +1,9 @@
 "use client"
 import React, { useState, useRef, useEffect } from 'react';
-import Login from './components/Login' ; 
+import ProtectedRoute from '../components/ProtectedRoute';
+import { useAuth } from '../../context/AuthContext';
+import { useRouter } from 'next/navigation';
+
 
 export default function ChatApp() {
   const [conversations, setConversations] = useState([
@@ -45,9 +48,6 @@ export default function ChatApp() {
   const [activeChat, setActiveChat] = useState(1);
   const [messageInput, setMessageInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [isTyping, setIsTyping] = useState(false);
-  const [userStatus, setUserStatus] = useState("online");
   const [showSettings, setShowSettings] = useState(false);
   const messageEndRef = useRef(null);
 
@@ -88,6 +88,18 @@ export default function ChatApp() {
     }
   };
 
+  const { currentUser, logout } = useAuth();
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      router.push('/login');
+    } catch (error) {
+      console.error('Failed to log out:', error);
+    }
+  };
+
   const filteredConversations = conversations.filter(conv =>
     conv.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -95,6 +107,7 @@ export default function ChatApp() {
 
 
   return (
+    <ProtectedRoute>
     <div style={{ display: 'flex', height: '100vh', fontFamily: 'Arial, sans-serif', backgroundColor: '#292828' }}>
       {/* Sidebar */}
       <div style={{ width: '300px', borderRight: '1px solid #ccc', display: 'flex', flexDirection: 'column' }}>
@@ -105,13 +118,22 @@ export default function ChatApp() {
               ME
             </div>
             <div>
-              <div style={{ fontWeight: 'bold' }}>My Profile</div>
+              <div style={{ fontWeight: 'bold' }}>{currentUser?.displayName || "User"}</div>
               
             </div>
             
           </div>
         </div>
+       
         
+      
+        {currentUser && (
+            
+              <button onClick={handleLogout} style={styles.button}>
+                Logout
+              </button>
+            
+          )}
 
         {/* Search */}
         <div style={{ padding: '10px' }}>
@@ -278,5 +300,37 @@ export default function ChatApp() {
         </div>
       )}
     </div>
+    </ProtectedRoute>
   );
 }
+
+const styles = {
+  container: {
+    display: 'flex',
+    height: '100vh',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+  },
+  card: {
+    padding: 30,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+    textAlign: 'center',
+  },
+  button: {
+    padding: '10px 20px',
+    backgroundColor: '#dc3545',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 5,
+    cursor: 'pointer',
+    marginTop: 15,
+  },
+  image: {
+    width: 80,
+    borderRadius: '50%',
+    margin: '10px 0',
+  }
+};
