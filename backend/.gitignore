@@ -24,3 +24,5 @@ instance/
 dist/
 build/
 *.egg-info/ 
+
+config/

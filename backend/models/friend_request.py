@@ -1,4 +1,4 @@
-from extenions import db
+from extensions import db
 from datetime import datetime, timezone
 
 class FriendRequest(db.Model):

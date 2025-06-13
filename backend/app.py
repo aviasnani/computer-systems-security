@@ -5,62 +5,75 @@ from extensions import db
 from models.message import Message
 from routes.user_routes import user_bp
 
-app = Flask(__name__)
-CORS(app)
-socketio = SocketIO(app, cors_allowed_origins="*")
 
-# Register blueprints
-app.register_blueprint(user_bp, url_prefix='/api')
+'''from flask import Flask, render_template, request, redirect, url_for, flashAdd commentMore actions
+from extensions import db, bcrypt
+from models.user import User
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from flask_cors import CORS
 
-# Basic config
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///chat.db'  # For development
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-db.init_app(app)
+@@ -9,5 +10,11 @@ def create_app():
+    app = Flask(__name__)
+    db.init_app(app)
+    bcrypt.init_app(app)
+    login_manager = LoginManager()
+    login_manager.init_app(app)
+    login_manager.login_view = "user_login"
 
-@app.route('/')
-def index():
-    return jsonify({"status": "ok", "message": "Server is running"})
 
-@socketio.on('connect')
-def handle_connect():
-    print("Client connected")
+    @login_manager.user_loader
+    def load_user(user_id): 
+        return User.query.filter_by(id=int(user_id)).first() '''
 
-@socketio.on('join_room')
-def handle_join_room(data):
-    """User joins their own room to receive messages"""
-    user_id = data.get('user_id')
-    if user_id:
-        room = f"user_{user_id}"
-        join_room(room)
-        return {"status": "joined", "room": room}
 
-@socketio.on('relay_message')
-def handle_message(data):
-    """
-    Simply relay encrypted messages between users
-    Frontend handles all encryption/decryption
-    """
-    try:
-        # Store encrypted message
-        message = Message(
-            sender_id=data['sender_id'],
-            recipient_id=data['recipient_id'],
-            encrypted_message=data['encrypted_message'],
-            message_type=data.get('message_type', 'text')
-        )
-        db.session.add(message)
-        db.session.commit()
+def create_app():
+    app = Flask(__name__)
+    CORS(app)
+    socketio = SocketIO(app, cors_allowed_origins="*")
+    app.register_blueprint(user_bp, url_prefix='/api')
+    db.init_app(app)
 
-        # Relay to recipient
-        recipient_room = f"user_{message.recipient_id}"
-        emit('new_message', message.to_dict(), room=recipient_room)
+    @app.route('/')
+    def index():
+        return jsonify({"status": "ok", "message": "Server is running"})
 
-        return {'status': 'sent', 'message_id': message.id}
+    @socketio.on('connect')
+    def handle_connect():
+        print("Client connected")
 
-    except Exception as e:
-        return {'status': 'error', 'message': str(e)}
+    @socketio.on('join_room')
+    def handle_join_room(data):
+        """User joins their own room to receive messages"""
+        user_id = data.get('user_id')
+        if user_id:
+            room = f"user_{user_id}"
+            join_room(room)
+            return {"status": "joined", "room": room}
 
-if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
-    socketio.run(app, debug=True)
+    @socketio.on('relay_message')
+    def handle_message(data):
+        """
+        Simply relay encrypted messages between users
+        Frontend handles all encryption/decryption
+        """
+        try:
+            # Store encrypted message
+            message = Message(
+                sender_id=data['sender_id'],
+                recipient_id=data['recipient_id'],
+                encrypted_message=data['encrypted_message'],
+                message_type=data.get('message_type', 'text')
+            )
+            db.session.add(message)
+            db.session.commit()
+
+            # Relay to recipient
+            recipient_room = f"user_{message.recipient_id}"
+            emit('new_message', message.to_dict(), room=recipient_room)
+
+            return {'status': 'sent', 'message_id': message.id}
+
+        except Exception as e:
+            return {'status': 'error', 'message': str(e)}
+
+
