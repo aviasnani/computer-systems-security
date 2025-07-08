@@ -17,7 +17,6 @@ class User(db.Model, UserMixin):
     #firebase user info
     firebase_uid = db.Column(db.String(128), unique=True, nullable=True)
     profile_picture = db.Column(db.String(255))
-    key_version = db.Column(db.Integer, default=1)
     last_seen = db.Column(db.DateTime(timezone=True))
 
     def to_dict(self):
@@ -29,4 +28,3 @@ class User(db.Model, UserMixin):
             'created_at': self.created_at.isoformat(),
             'last_seen': self.last_seen.isoformat() if self.last_seen else None
         }
-  
