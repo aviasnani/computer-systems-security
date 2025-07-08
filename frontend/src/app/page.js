@@ -1,8 +1,10 @@
 "use client"
 import React, { useState, useRef, useEffect } from 'react';
-import Login from './components/Login' ; 
+import Login from './components/Login';
+import { useAuth } from '../context/AuthContext';
 
 export default function ChatApp() {
+  const { currentUser, loading } = useAuth();
   const [conversations, setConversations] = useState([
     {
       id: 1,
@@ -92,7 +94,17 @@ export default function ChatApp() {
     conv.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <div>Loading...</div>
+      </div>
+    );
+  }
+  
+  if (!currentUser) {
+    return <Login />;
+  }
 
   return (
     <div style={{ display: 'flex', height: '100vh', fontFamily: 'Arial, sans-serif', backgroundColor: '#292828' }}>

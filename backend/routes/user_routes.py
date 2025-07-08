@@ -1,13 +1,22 @@
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from models.user import User
 from services.security.key_management import KeyManagementService
+from routes.auth_routes import require_auth
 
 user_bp = Blueprint('user', __name__)
 
 @user_bp.route('/users/<int:user_id>/public-key', methods=['GET'])
+@require_auth
 def get_public_key(user_id):
-    """Get user's public key"""
+    """Get user's public key (requires authentication)"""
     try:
+        # Verify the user is authenticated
+        if not request.user:
+            return jsonify({
+                'status': 'error',
+                'message': 'Authentication required'
+            }), 401
+
         user = User.query.get(user_id)
         if not user:
             return jsonify({
@@ -21,7 +30,7 @@ def get_public_key(user_id):
                 'message': 'No public key available for this user'
             }), 404
 
-        # Validate key format
+        # Validate publickey format
         if not KeyManagementService.validate_public_key(user.public_key):
             return jsonify({
                 'status': 'error',

@@ -25,10 +25,28 @@ function Login() {
       
       const result = await signInWithPopup(auth, provider);
       
-      
       if (result.user) {
-        console.log("Successfully logged in:", result.user);
-      
+        // Get Firebase ID token
+        const idToken = await result.user.getIdToken();
+        
+        // Send token to backend
+        const response = await fetch('http://localhost:5000/api/auth/firebase', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({ firebaseToken: idToken })
+        });
+        
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+          console.log("Successfully logged in:", data.data);
+          router.push('/home');
+        } else {
+          setError(data.message || 'Authentication failed');
+        }
       } else {
         setError('Sign-in failed. Please try again.');
       }
