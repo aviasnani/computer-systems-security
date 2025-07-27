@@ -16,6 +16,10 @@ export default function ChatApp() {
     isConnected,
     currentRoom,
     sendMessage: sendWebSocketMessage,
+    connectionError,
+    lastError,
+    pendingMessagesCount,
+    retryConnection,
   } = useChat(defaultRoomId, currentUser?.uid, currentUser?.accessToken);
 
   const [messageInput, setMessageInput] = useState("");
@@ -23,7 +27,7 @@ export default function ChatApp() {
   const [showSettings, setShowSettings] = useState(false);
   const messageEndRef = useRef(null);
 
-  // Static conversations for sidebar
+  // Static conversations for sidebar (will be replaced in future tasks)
   const [conversations] = useState([
     {
       id: 1,
@@ -50,14 +54,12 @@ export default function ChatApp() {
   }, [messages]);
 
   const sendMessage = () => {
-    if (messageInput.trim() && isConnected) {
-      try {
-        sendWebSocketMessage(messageInput);
+    if (messageInput.trim()) {
+      const result = sendWebSocketMessage(messageInput);
+      if (result?.success || result?.queued) {
         setMessageInput("");
-      } catch (error) {
-        console.error("Failed to send message:", error);
-        // Could add error handling UI here
       }
+      // Error handling is now managed by the hook and displayed in UI
     }
   };
 
@@ -331,12 +333,37 @@ export default function ChatApp() {
                       color: isConnected ? "#28a745" : "#dc3545",
                     }}
                   >
-                    {isConnected ? "Connected" : "Disconnected"}
+                    {isConnected
+                      ? "Connected"
+                      : connectionError || "Disconnected"}
                   </span>
+                  {!isConnected && (
+                    <button
+                      onClick={retryConnection}
+                      style={{
+                        fontSize: "10px",
+                        padding: "2px 6px",
+                        backgroundColor: "#007bff",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "3px",
+                        cursor: "pointer",
+                        marginLeft: "5px",
+                      }}
+                    >
+                      Retry
+                    </button>
+                  )}
                 </div>
                 {currentRoom && isConnected && (
                   <div style={{ fontSize: "11px", color: "#666" }}>
                     Joined: {currentRoom}
+                  </div>
+                )}
+                {pendingMessagesCount > 0 && (
+                  <div style={{ fontSize: "10px", color: "#ffc107" }}>
+                    {pendingMessagesCount} message
+                    {pendingMessagesCount > 1 ? "s" : ""} queued
                   </div>
                 )}
               </div>
@@ -361,7 +388,7 @@ export default function ChatApp() {
                       <div>No messages yet. Start the conversation!</div>
                       {currentRoom && (
                         <div style={{ fontSize: "14px", color: "#999" }}>
-                          You're in room: <strong>{currentRoom}</strong>
+                          You&apos;re in room: <strong>{currentRoom}</strong>
                         </div>
                       )}
                     </>
@@ -423,6 +450,7 @@ export default function ChatApp() {
 
             {/* Message Input Area */}
             <div style={{ padding: "15px", borderTop: "1px solid #ccc" }}>
+              {/* Connection Error Display */}
               {!isConnected && (
                 <div
                   style={{
@@ -433,9 +461,58 @@ export default function ChatApp() {
                     marginBottom: "10px",
                     fontSize: "14px",
                     color: "#856404",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
                   }}
                 >
-                  ⚠️ Disconnected from chat. Trying to reconnect...
+                  <span>
+                    {connectionError || "Disconnected from chat"}
+                    {pendingMessagesCount > 0 && (
+                      <span style={{ marginLeft: "10px", fontSize: "12px" }}>
+                        ({pendingMessagesCount} message
+                        {pendingMessagesCount > 1 ? "s" : ""} will be sent when
+                        reconnected)
+                      </span>
+                    )}
+                  </span>
+                  <button
+                    onClick={retryConnection}
+                    style={{
+                      fontSize: "12px",
+                      padding: "4px 8px",
+                      backgroundColor: "#007bff",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "3px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Retry Now
+                  </button>
+                </div>
+              )}
+
+              {/* Last Error Display */}
+              {lastError && (
+                <div
+                  style={{
+                    padding: "8px",
+                    backgroundColor: "#f8d7da",
+                    border: "1px solid #f5c6cb",
+                    borderRadius: "4px",
+                    marginBottom: "10px",
+                    fontSize: "14px",
+                    color: "#721c24",
+                  }}
+                >
+                  {lastError.message}
+                  {lastError.type === "send_message" &&
+                    lastError.details?.queued && (
+                      <span style={{ fontSize: "12px", marginLeft: "10px" }}>
+                        (Message queued for retry)
+                      </span>
+                    )}
                 </div>
               )}
 
@@ -466,23 +543,26 @@ export default function ChatApp() {
 
                 <button
                   onClick={sendMessage}
-                  disabled={!messageInput.trim() || !isConnected}
+                  disabled={!messageInput.trim()}
                   style={{
                     padding: "10px 20px",
-                    backgroundColor:
-                      !messageInput.trim() || !isConnected
-                        ? "#6c757d"
-                        : "#007bff",
+                    backgroundColor: !messageInput.trim()
+                      ? "#6c757d"
+                      : isConnected
+                      ? "#007bff"
+                      : "#ffc107",
                     color: "white",
                     border: "none",
                     borderRadius: "4px",
-                    cursor:
-                      !messageInput.trim() || !isConnected
-                        ? "not-allowed"
-                        : "pointer",
+                    cursor: !messageInput.trim() ? "not-allowed" : "pointer",
                   }}
+                  title={
+                    !isConnected
+                      ? "Message will be queued and sent when reconnected"
+                      : "Send message"
+                  }
                 >
-                  Send
+                  {isConnected ? "Send" : "Queue"}
                 </button>
               </div>
             </div>

@@ -7,10 +7,15 @@ class WebSocketService {
     this.connectionCallbacks = [];
     this.messageCallbacks = [];
     this.roomCallbacks = [];
+    this.errorCallbacks = [];
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 3;
     this.currentRoom = null;
     this.pendingRoomJoin = null;
+    this.reconnectTimer = null;
+    this.connectionError = null;
+    this.pendingMessages = [];
+    this.isReconnecting = false;
   }
 
   /**
@@ -94,18 +99,44 @@ class WebSocketService {
    * Send a message to a room
    */
   sendMessage(roomId, message) {
+    const messageData = {
+      sender_id: this.socket?.auth?.userId,
+      room_id: roomId,
+      content: message,
+      message_type: "text",
+      id: Date.now() + Math.random(), // Temporary ID for tracking
+      timestamp: new Date().toISOString(),
+    };
+
     if (this.socket && this.isConnected) {
-      // Get user_id from auth data stored during connection
-      const userId = this.socket.auth?.userId;
-      this.socket.emit("send_message", {
-        sender_id: userId,
-        room_id: roomId,
-        content: message,
-        message_type: "text",
-      });
+      try {
+        this.socket.emit("send_message", messageData);
+        return { success: true, messageId: messageData.id };
+      } catch (error) {
+        console.error("Failed to send message:", error);
+        this.notifyError("Failed to send message", "send_message", {
+          messageData,
+          error: error.message,
+        });
+        return {
+          success: false,
+          error: error.message,
+          messageId: messageData.id,
+        };
+      }
     } else {
-      console.error("Cannot send message: WebSocket not connected");
-      throw new Error("WebSocket not connected");
+      // Queue message for retry when reconnected
+      this.pendingMessages.push(messageData);
+      const errorMsg = this.isReconnecting
+        ? "Reconnecting... Message will be sent when connected."
+        : "WebSocket not connected";
+      this.notifyError(errorMsg, "send_message", { messageData });
+      return {
+        success: false,
+        error: errorMsg,
+        messageId: messageData.id,
+        queued: true,
+      };
     }
   }
 
@@ -128,6 +159,13 @@ class WebSocketService {
    */
   onRoomStatus(callback) {
     this.roomCallbacks.push(callback);
+  }
+
+  /**
+   * Register callback for error notifications
+   */
+  onError(callback) {
+    this.errorCallbacks.push(callback);
   }
 
   /**
@@ -156,6 +194,13 @@ class WebSocketService {
   }
 
   /**
+   * Remove error callback
+   */
+  removeErrorCallback(callback) {
+    this.errorCallbacks = this.errorCallbacks.filter((cb) => cb !== callback);
+  }
+
+  /**
    * Setup event listeners for the socket
    */
   setupEventListeners() {
@@ -165,7 +210,16 @@ class WebSocketService {
     this.socket.on("connect", () => {
       console.log("WebSocket connected");
       this.isConnected = true;
+      this.isReconnecting = false;
       this.reconnectAttempts = 0;
+      this.connectionError = null;
+
+      // Clear any existing reconnect timer
+      if (this.reconnectTimer) {
+        clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = null;
+      }
+
       this.notifyConnectionStatus(true);
 
       // Auto-join pending room if any
@@ -174,16 +228,21 @@ class WebSocketService {
           this.joinRoom(this.pendingRoomJoin);
         }, 100);
       }
+
+      // Send any pending messages
+      this.sendPendingMessages();
     });
 
     // Connection lost
     this.socket.on("disconnect", (reason) => {
       console.log("WebSocket disconnected:", reason);
       this.isConnected = false;
-      this.notifyConnectionStatus(false);
+      this.connectionError = `Disconnected: ${reason}`;
+      this.notifyConnectionStatus(false, this.connectionError);
 
       // Attempt reconnection if not manually disconnected
       if (reason !== "io client disconnect") {
+        this.isReconnecting = true;
         this.attemptReconnection();
       }
     });
@@ -192,8 +251,16 @@ class WebSocketService {
     this.socket.on("connect_error", (error) => {
       console.error("WebSocket connection error:", error);
       this.isConnected = false;
-      this.notifyConnectionStatus(false, error.message);
-      this.attemptReconnection();
+      this.connectionError = error.message || "Connection failed";
+      this.notifyConnectionStatus(false, this.connectionError);
+      this.notifyError("Connection failed", "connect_error", {
+        error: error.message,
+      });
+
+      if (!this.isReconnecting) {
+        this.isReconnecting = true;
+        this.attemptReconnection();
+      }
     });
 
     // Incoming messages
@@ -243,6 +310,7 @@ class WebSocketService {
     // Message error handling
     this.socket.on("message_error", (data) => {
       console.error("Message error:", data.message);
+      this.notifyError("Message failed to send", "message_error", data);
     });
   }
 
@@ -250,22 +318,47 @@ class WebSocketService {
    * Attempt to reconnect to the server
    */
   attemptReconnection() {
+    // Clear any existing timer
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       console.error("Max reconnection attempts reached");
-      this.notifyConnectionStatus(false, "Max reconnection attempts reached");
+      this.isReconnecting = false;
+      this.connectionError =
+        "Max reconnection attempts reached. Please refresh the page.";
+      this.notifyConnectionStatus(false, this.connectionError);
+      this.notifyError(
+        "Connection failed permanently",
+        "max_reconnect_attempts",
+        {
+          attempts: this.reconnectAttempts,
+          maxAttempts: this.maxReconnectAttempts,
+        }
+      );
       return;
     }
 
     this.reconnectAttempts++;
-    const delay = Math.pow(2, this.reconnectAttempts) * 1000; // Exponential backoff
+    const delay = Math.min(Math.pow(2, this.reconnectAttempts) * 1000, 30000); // Exponential backoff, max 30s
 
     console.log(
       `Attempting reconnection ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${delay}ms`
     );
 
-    setTimeout(() => {
+    this.connectionError = `Reconnecting... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`;
+    this.notifyConnectionStatus(false, this.connectionError);
+
+    this.reconnectTimer = setTimeout(() => {
       if (this.socket && !this.isConnected) {
-        this.socket.connect();
+        try {
+          this.socket.connect();
+        } catch (error) {
+          console.error("Reconnection attempt failed:", error);
+          this.attemptReconnection(); // Try again
+        }
       }
     }, delay);
   }
@@ -308,6 +401,91 @@ class WebSocketService {
         console.error("Error in room status callback:", error);
       }
     });
+  }
+
+  /**
+   * Notify all error callbacks
+   */
+  notifyError(message, type, details = {}) {
+    const errorData = {
+      message,
+      type,
+      details,
+      timestamp: new Date().toISOString(),
+    };
+
+    this.errorCallbacks.forEach((callback) => {
+      try {
+        callback(errorData);
+      } catch (error) {
+        console.error("Error in error callback:", error);
+      }
+    });
+  }
+
+  /**
+   * Send any pending messages that were queued during disconnection
+   */
+  sendPendingMessages() {
+    if (this.pendingMessages.length === 0) return;
+
+    console.log(`Sending ${this.pendingMessages.length} pending messages`);
+    const messagesToSend = [...this.pendingMessages];
+    this.pendingMessages = [];
+
+    messagesToSend.forEach((messageData) => {
+      try {
+        this.socket.emit("send_message", messageData);
+      } catch (error) {
+        console.error("Failed to send pending message:", error);
+        // Re-queue the message if it fails
+        this.pendingMessages.push(messageData);
+        this.notifyError(
+          "Failed to send queued message",
+          "send_pending_message",
+          { messageData, error: error.message }
+        );
+      }
+    });
+  }
+
+  /**
+   * Manually retry connection
+   */
+  retryConnection() {
+    if (this.isConnected) {
+      console.log("Already connected");
+      return;
+    }
+
+    // Reset reconnection attempts to allow manual retry
+    this.reconnectAttempts = 0;
+    this.isReconnecting = true;
+    this.connectionError = "Retrying connection...";
+    this.notifyConnectionStatus(false, this.connectionError);
+
+    if (this.socket) {
+      try {
+        this.socket.connect();
+      } catch (error) {
+        console.error("Manual retry failed:", error);
+        this.attemptReconnection();
+      }
+    }
+  }
+
+  /**
+   * Get current connection error
+   */
+  getConnectionError() {
+    return this.connectionError;
+  }
+
+  /**
+   * Get pending messages count
+   */
+  getPendingMessagesCount() {
+    return this.pendingMessages.length;
   }
 }
 
