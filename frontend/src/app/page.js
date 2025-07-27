@@ -14,6 +14,7 @@ export default function ChatApp() {
   const {
     messages,
     isConnected,
+    currentRoom,
     sendMessage: sendWebSocketMessage,
   } = useChat(defaultRoomId, currentUser?.uid, currentUser?.accessToken);
 
@@ -22,7 +23,7 @@ export default function ChatApp() {
   const [showSettings, setShowSettings] = useState(false);
   const messageEndRef = useRef(null);
 
-  // Static conversations replace in future
+  // Static conversations for sidebar
   const [conversations] = useState([
     {
       id: 1,
@@ -296,29 +297,48 @@ export default function ChatApp() {
                   <div style={{ fontWeight: "bold" }}>
                     {currentConversation.name}
                   </div>
+                  {currentRoom && (
+                    <div style={{ fontSize: "12px", color: "#666" }}>
+                      Room: {currentRoom}
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* Connection Status Indicator */}
+              {/* Connection and Room Status */}
               <div
-                style={{ display: "flex", alignItems: "center", gap: "5px" }}
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "flex-end",
+                  gap: "2px",
+                }}
               >
                 <div
-                  style={{
-                    width: "8px",
-                    height: "8px",
-                    borderRadius: "50%",
-                    backgroundColor: isConnected ? "#28a745" : "#dc3545",
-                  }}
-                ></div>
-                <span
-                  style={{
-                    fontSize: "12px",
-                    color: isConnected ? "#28a745" : "#dc3545",
-                  }}
+                  style={{ display: "flex", alignItems: "center", gap: "5px" }}
                 >
-                  {isConnected ? "Connected" : "Disconnected"}
-                </span>
+                  <div
+                    style={{
+                      width: "8px",
+                      height: "8px",
+                      borderRadius: "50%",
+                      backgroundColor: isConnected ? "#28a745" : "#dc3545",
+                    }}
+                  ></div>
+                  <span
+                    style={{
+                      fontSize: "12px",
+                      color: isConnected ? "#28a745" : "#dc3545",
+                    }}
+                  >
+                    {isConnected ? "Connected" : "Disconnected"}
+                  </span>
+                </div>
+                {currentRoom && isConnected && (
+                  <div style={{ fontSize: "11px", color: "#666" }}>
+                    Joined: {currentRoom}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -332,11 +352,22 @@ export default function ChatApp() {
                     justifyContent: "center",
                     height: "100%",
                     color: "#666",
+                    flexDirection: "column",
+                    gap: "10px",
                   }}
                 >
-                  {isConnected
-                    ? "No messages yet. Start the conversation!"
-                    : "Connecting to chat..."}
+                  {isConnected ? (
+                    <>
+                      <div>No messages yet. Start the conversation!</div>
+                      {currentRoom && (
+                        <div style={{ fontSize: "14px", color: "#999" }}>
+                          You're in room: <strong>{currentRoom}</strong>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div>Connecting to chat...</div>
+                  )}
                 </div>
               ) : (
                 messages.map((message) => (

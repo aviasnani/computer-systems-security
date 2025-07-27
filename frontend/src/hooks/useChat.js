@@ -1,10 +1,13 @@
 import { useState, useEffect } from "react";
 import websocketService from "../services/websocket";
 
-/** chat hook*/
+/**
+ * chat project
+ */
 export const useChat = (roomId, userId, token) => {
   const [messages, setMessages] = useState([]);
   const [isConnected, setIsConnected] = useState(false);
+  const [currentRoom, setCurrentRoom] = useState(null);
 
   // Handle incoming messages
   const handleMessage = (messageData) => {
@@ -25,6 +28,11 @@ export const useChat = (roomId, userId, token) => {
     setIsConnected(status.connected);
   };
 
+  // Handle room status
+  const handleRoomStatus = (roomId) => {
+    setCurrentRoom(roomId);
+  };
+
   // Setup WebSocket connection
   useEffect(() => {
     if (!userId || !token || !roomId) return;
@@ -32,17 +40,17 @@ export const useChat = (roomId, userId, token) => {
     // Register callbacks
     websocketService.onMessage(handleMessage);
     websocketService.onConnectionStatus(handleConnectionStatus);
+    websocketService.onRoomStatus(handleRoomStatus);
 
-    // Connect and join room
+    // Connect and join room automatically
     websocketService.connect(userId, token);
-    setTimeout(() => {
-      websocketService.joinRoom(roomId);
-    }, 1000);
+    websocketService.joinRoom(roomId);
 
     // Cleanup
     return () => {
       websocketService.removeMessageCallback(handleMessage);
       websocketService.removeConnectionCallback(handleConnectionStatus);
+      websocketService.removeRoomCallback(handleRoomStatus);
     };
   }, [userId, token, roomId]);
 
@@ -56,6 +64,7 @@ export const useChat = (roomId, userId, token) => {
   return {
     messages,
     isConnected,
+    currentRoom,
     sendMessage,
   };
 };
