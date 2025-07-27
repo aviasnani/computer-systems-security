@@ -52,3 +52,12 @@ def get_public_key(user_id):
             'status': 'error',
             'message': str(e)
         }), 500 
+
+@user_bp.route('/public-key', methods=['POST'])
+@require_auth
+def store_public_key():
+    data = request.get_json()
+    user = User.query.filter_by(firebase_uid=request.user['uid']).first()
+    user.public_key = data['publicKey']
+    db.session.commit()
+    return jsonify({'status': 'success'})
