@@ -40,9 +40,13 @@ export const useKeyManagement = (userId) => {
     try {
       // Get Firebase token
       const user = auth.currentUser;
-      if (!user) return;
+      if (!user) {
+        console.log('No current user for token');
+        return;
+      }
       
       const token = await user.getIdToken();
+      console.log('Got Firebase token:', token ? 'Yes' : 'No');
       
       const response = await fetch("http://localhost:5000/api/public-key", {
         method: "POST",
@@ -52,7 +56,12 @@ export const useKeyManagement = (userId) => {
         },
         body: JSON.stringify({ publicKey }),
       });
-      if (!response.ok) throw new Error("Failed to upload public key");
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Server response:', response.status, errorText);
+        throw new Error(`Failed to upload public key: ${response.status}`);
+      }
+      console.log('Public key uploaded successfully');
     } catch (error) {
       console.error("Public key upload failed:", error);
     }

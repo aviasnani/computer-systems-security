@@ -63,6 +63,79 @@ def firebase_auth_handler():
             'message': 'Authentication failed'
         }), 500
 
+@auth_bp.route('/signup', methods=['POST'])
+def manual_signup():
+    """Manual user registration"""
+    try:
+        data = request.get_json()
+        email = data.get('email')
+        password = data.get('password')
+        name = data.get('name')
+        
+        if not email or not password:
+            return jsonify({'status': 'error', 'message': 'Email and password required'}), 400
+            
+        # Check if user exists
+        if User.query.filter_by(email=email).first():
+            return jsonify({'status': 'error', 'message': 'User already exists'}), 400
+            
+        # Create user
+        user = User(
+            email=email,
+            username=email,
+            name=name or email.split('@')[0],
+            firebase_uid=f'manual_{email}',
+            provider='manual'
+        )
+        
+        db.session.add(user)
+        db.session.commit()
+        
+        return jsonify({
+            'status': 'success',
+            'user': {
+                'id': user.id,
+                'email': user.email,
+                'name': user.name
+            }
+        }), 201
+        
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@auth_bp.route('/login', methods=['POST'])
+def manual_login():
+    """Manual user login"""
+    try:
+        data = request.get_json()
+        email = data.get('email')
+        password = data.get('password')
+        
+        if not email or not password:
+            return jsonify({'status': 'error', 'message': 'Email and password required'}), 400
+            
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            return jsonify({'status': 'error', 'message': 'User not found'}), 404
+            
+        # For demo, accept any password
+        session['user_id'] = user.id
+        session['firebase_uid'] = user.firebase_uid
+        session['authenticated'] = True
+        
+        return jsonify({
+            'status': 'success',
+            'user': {
+                'id': user.id,
+                'email': user.email,
+                'name': user.name,
+                'uid': user.firebase_uid
+            }
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
 @auth_bp.route('/check', methods=['GET'])
 @require_auth
 def check_auth():

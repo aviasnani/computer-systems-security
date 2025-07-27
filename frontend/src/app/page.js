@@ -27,7 +27,7 @@ export default function ChatApp() {
 
   // Only join/use chat when a room is selected
   const chat = activeRoom
-    ? useChat(activeRoom.id, currentUser?.uid, currentUser?.accessToken, aesKey)
+    ? useChat(activeRoom.id, currentUser?.uid, 'mock-token', aesKey)
     : {};
   const {
     messages = [],

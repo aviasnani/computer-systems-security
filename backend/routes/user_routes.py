@@ -57,8 +57,17 @@ def get_public_key(user_id):
 @user_bp.route('/public-key', methods=['POST'])
 @require_auth
 def store_public_key():
-    data = request.get_json()
-    user = User.query.filter_by(firebase_uid=request.user['uid']).first()
-    user.public_key = data['publicKey']
-    db.session.commit()
-    return jsonify({'status': 'success'})
+    try:
+        data = request.get_json()
+        if not data or 'publicKey' not in data:
+            return jsonify({'status': 'error', 'message': 'publicKey required'}), 400
+            
+        user = User.query.filter_by(firebase_uid=request.user['uid']).first()
+        if not user:
+            return jsonify({'status': 'error', 'message': 'User not found'}), 404
+            
+        user.public_key = data['publicKey']
+        db.session.commit()
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
