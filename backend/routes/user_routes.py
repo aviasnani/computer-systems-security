@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request
 from models.user import User
 from services.security.key_management import KeyManagementService
 from routes.auth_routes import require_auth
+from extensions import db
 
 user_bp = Blueprint('user', __name__)
 

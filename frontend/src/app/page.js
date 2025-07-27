@@ -22,7 +22,7 @@ export default function ChatApp() {
     lastError,
     pendingMessagesCount,
     retryConnection,
-  } = useChat(defaultRoomId, currentUser?.uid, currentUser?.accessToken);
+  } = useChat(defaultRoomId, currentUser?.uid, currentUser?.accessToken, aesKey);
 
   const [messageInput, setMessageInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");

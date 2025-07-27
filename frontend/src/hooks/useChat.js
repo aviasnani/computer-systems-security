@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 import websocketService from "../services/websocket";
+import CryptoService from "../services/cryptoService";
 
 /**
  * chat project
  */
-export const useChat = (roomId, userId, token) => {
+export const useChat = (roomId, userId, token, aesKey) => {
   const [messages, setMessages] = useState([]);
   const [isConnected, setIsConnected] = useState(false);
   const [currentRoom, setCurrentRoom] = useState(null);
@@ -14,10 +15,26 @@ export const useChat = (roomId, userId, token) => {
 
   // Handle incoming messages
   const handleMessage = useCallback(
-    (messageData) => {
+    async (messageData) => {
+      let content = messageData.content;
+
+      // Try to decrypt if it's encrypted
+      if (aesKey && content.startsWith("{")) {
+        try {
+          const encrypted = JSON.parse(content);
+          content = await CryptoService.decryptWithAES(
+            encrypted.encryptedData,
+            encrypted.iv,
+            aesKey
+          );
+        } catch (e) {
+          // Not encrypted or decryption failed
+        }
+      }
+
       const newMessage = {
         id: messageData.id || Date.now(),
-        text: messageData.content,
+        text: content,
         sender: messageData.sender_id === userId ? "me" : "other",
         timestamp: new Date().toLocaleTimeString([], {
           hour: "2-digit",
@@ -26,7 +43,7 @@ export const useChat = (roomId, userId, token) => {
       };
       setMessages((prev) => [...prev, newMessage]);
     },
-    [userId]
+    [userId, aesKey]
   );
 
   // Handle connection status
