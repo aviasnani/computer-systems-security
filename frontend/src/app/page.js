@@ -9,57 +9,44 @@ import CryptoService from "../services/cryptoService";
 export default function ChatApp() {
   const { currentUser, loading } = useAuth();
   const { rsaKeys, aesKey, isGenerating } = useKeyManagement(currentUser?.uid);
-  // Default room for this implementation
-  const defaultRoomId = "general";
-
-  // Use WebSocket chat hook
-  const {
-    messages,
-    isConnected,
-    currentRoom,
-    sendMessage: sendWebSocketMessage,
-    connectionError,
-    lastError,
-    pendingMessagesCount,
-    retryConnection,
-  } = useChat(defaultRoomId, currentUser?.uid, currentUser?.accessToken, aesKey);
-
+  // --- UI State ---
+  const [friends, setFriends] = useState([
+    // Example friend list
+    { id: 2, name: "Alice", online: true },
+    { id: 3, name: "Bob", online: false },
+  ]);
+  const [rooms, setRooms] = useState([
+    // Example room list
+    { id: "general", name: "General Chat" },
+  ]);
+  const [showAddFriend, setShowAddFriend] = useState(false);
+  const [addFriendEmail, setAddFriendEmail] = useState("");
+  const [activeRoom, setActiveRoom] = useState(null); // No room joined by default
   const [messageInput, setMessageInput] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [showSettings, setShowSettings] = useState(false);
   const messageEndRef = useRef(null);
 
-  // Static conversations for sidebar (will be replaced in future tasks)
-  const [conversations] = useState([
-    {
-      id: 1,
-      name: "General Chat",
-      lastMessage: "Welcome to the chat!",
-      timestamp: new Date().toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-      unread: 0,
-      online: true,
-      isGroup: true,
-      roomId: defaultRoomId,
-    },
-  ]);
-
-  const [activeChat, setActiveChat] = useState(1);
-  const currentConversation = conversations.find(
-    (conv) => conv.id === activeChat
-  );
+  // Only join/use chat when a room is selected
+  const chat = activeRoom
+    ? useChat(activeRoom.id, currentUser?.uid, currentUser?.accessToken, aesKey)
+    : {};
+  const {
+    messages = [],
+    isConnected = false,
+    currentRoom = null,
+    sendMessage: sendWebSocketMessage = () => {},
+    connectionError = null,
+    lastError = null,
+    pendingMessagesCount = 0,
+    retryConnection = () => {},
+  } = chat;
 
   useEffect(() => {
     messageEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   const sendMessage = async () => {
-    if (messageInput.trim()) {
+    if (messageInput.trim() && activeRoom) {
       let messageToSend = messageInput.trim();
-
-      // Encrypt if keys available
       if (aesKey) {
         try {
           const encrypted = await CryptoService.encryptWithAES(
@@ -71,7 +58,6 @@ export default function ChatApp() {
           console.error("Encryption failed:", error);
         }
       }
-
       const result = sendWebSocketMessage(messageToSend);
       if (result?.success || result?.queued) {
         setMessageInput("");
@@ -86,9 +72,17 @@ export default function ChatApp() {
     }
   };
 
-  const filteredConversations = conversations.filter((conv) =>
-    conv.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Add friend handler (stub)
+  const handleAddFriend = () => {
+    if (addFriendEmail.trim()) {
+      setFriends((prev) => [
+        ...prev,
+        { id: Date.now(), name: addFriendEmail, online: false },
+      ]);
+      setAddFriendEmail("");
+      setShowAddFriend(false);
+    }
+  };
 
   if (loading || isGenerating) {
     return (
@@ -98,9 +92,24 @@ export default function ChatApp() {
           justifyContent: "center",
           alignItems: "center",
           height: "100vh",
+          backgroundColor: "#1a1a1a",
+          color: "white",
         }}
       >
-        <div>{loading ? "Loading..." : "Generating encryption keys..."}</div>
+        <div style={{ textAlign: "center" }}>
+          <div
+            style={{
+              width: "40px",
+              height: "40px",
+              border: "4px solid #333",
+              borderTop: "4px solid #007bff",
+              borderRadius: "50%",
+              animation: "spin 1s linear infinite",
+              margin: "0 auto 20px",
+            }}
+          ></div>
+          <div>{loading ? "Loading..." : "Generating encryption keys..."}</div>
+        </div>
       </div>
     );
   }
@@ -114,303 +123,273 @@ export default function ChatApp() {
       style={{
         display: "flex",
         height: "100vh",
-        fontFamily: "Arial, sans-serif",
-        backgroundColor: "#292828",
+        backgroundColor: "#18181b",
+        color: "#fff",
+        fontFamily: "Inter, Arial, sans-serif",
       }}
     >
       {/* Sidebar */}
       <div
         style={{
-          width: "300px",
-          borderRight: "1px solid #ccc",
+          width: 320,
+          background: "#23232a",
+          borderRight: "1px solid #222",
           display: "flex",
           flexDirection: "column",
         }}
       >
-        {/* User Profile Section */}
-        <div style={{ padding: "20px", borderBottom: "1px solid #eee" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        {/* User Info */}
+        <div style={{ padding: 24, borderBottom: "1px solid #222" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <div
               style={{
-                width: "40px",
-                height: "40px",
+                width: 44,
+                height: 44,
                 borderRadius: "50%",
-                backgroundColor: "#007bff",
+                background: "#007bff",
+                color: "#fff",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                color: "white",
+                fontWeight: 700,
+                fontSize: 20,
               }}
             >
-              ME
+              {currentUser?.email?.charAt(0)?.toUpperCase() || "U"}
             </div>
-            <div>
-              <div style={{ fontWeight: "bold" }}>My Profile</div>
+            <div style={{ flex: 1 }}>
+              <div
+                style={{
+                  fontWeight: 600,
+                  fontSize: 15,
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+              >
+                {currentUser?.email}
+              </div>
+              <div style={{ fontSize: 12, color: "#7dd3fc" }}>
+                {activeRoom ? "In room: " + activeRoom.name : "Not in a room"}
+              </div>
             </div>
           </div>
         </div>
-
-        {/* Search */}
-        <div style={{ padding: "10px" }}>
-          <input
-            type="text"
-            placeholder="Search conversations..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+        {/* Friends List */}
+        <div style={{ padding: 24, borderBottom: "1px solid #222", flex: 1 }}>
+          <div
             style={{
-              width: "100%",
-              padding: "8px",
-              border: "1px solid #ccc",
-              borderRadius: "4px",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 10,
             }}
-          />
-        </div>
-
-        {/* Conversations List */}
-        <div style={{ flex: 1, overflowY: "auto" }}>
-          {filteredConversations.map((conv) => (
-            <div
-              key={conv.id}
-              onClick={() => setActiveChat(conv.id)}
+          >
+            <div style={{ fontWeight: 600, fontSize: 14 }}>Friends</div>
+            <button
+              onClick={() => setShowAddFriend(true)}
               style={{
-                padding: "15px",
-                borderBottom: "1px solid #eee",
+                background: "#007bff",
+                color: "#fff",
+                border: 0,
+                borderRadius: 6,
+                padding: "2px 10px",
+                fontSize: 13,
                 cursor: "pointer",
-                backgroundColor:
-                  activeChat === conv.id ? "#f0f8ff" : "transparent",
               }}
             >
+              Add
+            </button>
+          </div>
+          <div style={{ maxHeight: 120, overflowY: "auto" }}>
+            {friends.length === 0 && (
+              <div style={{ color: "#888", fontSize: 13 }}>No friends yet</div>
+            )}
+            {friends.map((f) => (
               <div
-                style={{ display: "flex", alignItems: "center", gap: "10px" }}
-              >
-                <div style={{ position: "relative" }}>
-                  <div
-                    style={{
-                      width: "40px",
-                      height: "40px",
-                      borderRadius: "50%",
-                      backgroundColor: "#28a745",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      color: "white",
-                    }}
-                  >
-                    {conv.isGroup
-                      ? "👥"
-                      : conv.name
-                          .split(" ")
-                          .map((n) => n[0])
-                          .join("")}
-                  </div>
-                  {conv.online && (
-                    <div
-                      style={{
-                        position: "absolute",
-                        bottom: "0",
-                        right: "0",
-                        width: "12px",
-                        height: "12px",
-                        borderRadius: "50%",
-                        backgroundColor: "#28a745",
-                        border: "2px solid white",
-                      }}
-                    ></div>
-                  )}
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                    }}
-                  >
-                    <span style={{ fontWeight: "bold" }}>{conv.name}</span>
-                    <span style={{ fontSize: "12px", color: "#666" }}>
-                      {conv.timestamp}
-                    </span>
-                  </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontSize: "14px",
-                        color: "#666",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {conv.lastMessage}
-                    </span>
-                    {conv.unread > 0 && (
-                      <span
-                        style={{
-                          backgroundColor: "#dc3545",
-                          color: "white",
-                          borderRadius: "50%",
-                          width: "20px",
-                          height: "20px",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          fontSize: "12px",
-                        }}
-                      >
-                        {conv.unread}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Main Chat Area */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-        {currentConversation ? (
-          <>
-            {/* Chat Header */}
-            <div
-              style={{
-                padding: "15px",
-                borderBottom: "1px solid #ccc",
-                display: "flex",
-                alignItems: "center",
-                gap: "10px",
-                justifyContent: "space-between",
-              }}
-            >
-              <div
-                style={{ display: "flex", alignItems: "center", gap: "10px" }}
-              >
-                <div
-                  style={{
-                    width: "40px",
-                    height: "40px",
-                    borderRadius: "50%",
-                    backgroundColor: "#28a745",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: "white",
-                  }}
-                >
-                  {currentConversation.isGroup
-                    ? "👥"
-                    : currentConversation.name
-                        .split(" ")
-                        .map((n) => n[0])
-                        .join("")}
-                </div>
-                <div>
-                  <div style={{ fontWeight: "bold" }}>
-                    {currentConversation.name}
-                  </div>
-                  {currentRoom && (
-                    <div style={{ fontSize: "12px", color: "#666" }}>
-                      Room: {currentRoom}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Connection and Room Status */}
-              <div
+                key={f.id}
                 style={{
                   display: "flex",
-                  flexDirection: "column",
-                  alignItems: "flex-end",
-                  gap: "2px",
+                  alignItems: "center",
+                  gap: 8,
+                  marginBottom: 6,
                 }}
               >
                 <div
-                  style={{ display: "flex", alignItems: "center", gap: "5px" }}
-                >
-                  <div
-                    style={{
-                      width: "8px",
-                      height: "8px",
-                      borderRadius: "50%",
-                      backgroundColor: isConnected ? "#28a745" : "#dc3545",
-                    }}
-                  ></div>
-                  <span
-                    style={{
-                      fontSize: "12px",
-                      color: isConnected ? "#28a745" : "#dc3545",
-                    }}
-                  >
-                    {isConnected
-                      ? "Connected"
-                      : connectionError || "Disconnected"}
-                  </span>
-                  {!isConnected && (
-                    <button
-                      onClick={retryConnection}
-                      style={{
-                        fontSize: "10px",
-                        padding: "2px 6px",
-                        backgroundColor: "#007bff",
-                        color: "white",
-                        border: "none",
-                        borderRadius: "3px",
-                        cursor: "pointer",
-                        marginLeft: "5px",
-                      }}
-                    >
-                      Retry
-                    </button>
-                  )}
-                </div>
-                {currentRoom && isConnected && (
-                  <div style={{ fontSize: "11px", color: "#666" }}>
-                    Joined: {currentRoom}
-                  </div>
-                )}
-                {pendingMessagesCount > 0 && (
-                  <div style={{ fontSize: "10px", color: "#ffc107" }}>
-                    {pendingMessagesCount} message
-                    {pendingMessagesCount > 1 ? "s" : ""} queued
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Messages Area */}
-            <div style={{ flex: 1, overflowY: "auto", padding: "10px" }}>
-              {messages.length === 0 ? (
-                <div
                   style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    height: "100%",
-                    color: "#666",
-                    flexDirection: "column",
-                    gap: "10px",
+                    width: 10,
+                    height: 10,
+                    borderRadius: "50%",
+                    background: f.online ? "#22c55e" : "#888",
+                  }}
+                ></div>
+                <div style={{ fontSize: 13 }}>{f.name}</div>
+                <button
+                  style={{
+                    marginLeft: "auto",
+                    fontSize: 12,
+                    color: "#007bff",
+                    background: "none",
+                    border: 0,
+                    cursor: "pointer",
+                  }}
+                  onClick={() => setActiveRoom({ id: f.id, name: f.name })}
+                >
+                  Chat
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+        {/* Rooms List */}
+        <div style={{ padding: 24, borderBottom: "1px solid #222" }}>
+          <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 10 }}>
+            Rooms
+          </div>
+          <div style={{ maxHeight: 80, overflowY: "auto" }}>
+            {rooms.map((room) => (
+              <div
+                key={room.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  marginBottom: 6,
+                }}
+              >
+                <div style={{ fontSize: 13 }}>{room.name}</div>
+                <button
+                  style={{
+                    marginLeft: "auto",
+                    fontSize: 12,
+                    color: "#007bff",
+                    background: "none",
+                    border: 0,
+                    cursor: "pointer",
+                  }}
+                  onClick={() => setActiveRoom(room)}
+                >
+                  Join
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+        {/* Add Friend Modal */}
+        {showAddFriend && (
+          <div
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              width: "100vw",
+              height: "100vh",
+              background: "rgba(0,0,0,0.4)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 100,
+            }}
+          >
+            <div
+              style={{
+                background: "#23232a",
+                padding: 32,
+                borderRadius: 10,
+                minWidth: 320,
+              }}
+            >
+              <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 16 }}>
+                Add Friend
+              </div>
+              <input
+                value={addFriendEmail}
+                onChange={(e) => setAddFriendEmail(e.target.value)}
+                placeholder="Enter email or username"
+                style={{
+                  width: "100%",
+                  padding: 8,
+                  borderRadius: 6,
+                  border: "1px solid #333",
+                  marginBottom: 16,
+                  background: "#18181b",
+                  color: "#fff",
+                }}
+              />
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  onClick={handleAddFriend}
+                  style={{
+                    flex: 1,
+                    background: "#007bff",
+                    color: "#fff",
+                    border: 0,
+                    borderRadius: 6,
+                    padding: 8,
+                    fontWeight: 600,
+                    cursor: "pointer",
                   }}
                 >
-                  {isConnected ? (
-                    <>
-                      <div>No messages yet. Start the conversation!</div>
-                      {currentRoom && (
-                        <div style={{ fontSize: "14px", color: "#999" }}>
-                          You&apos;re in room: <strong>{currentRoom}</strong>
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <div>Connecting to chat...</div>
-                  )}
+                  Add
+                </button>
+                <button
+                  onClick={() => setShowAddFriend(false)}
+                  style={{
+                    flex: 1,
+                    background: "#333",
+                    color: "#fff",
+                    border: 0,
+                    borderRadius: 6,
+                    padding: 8,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+      {/* Main Area */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+        {/* Lobby/Welcome state */}
+        {!activeRoom && (
+          <div
+            style={{
+              flex: 1,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexDirection: "column",
+              color: "#888",
+            }}
+          >
+            <div style={{ fontSize: 22, fontWeight: 600, marginBottom: 10 }}>
+              Welcome!
+            </div>
+            <div style={{ fontSize: 15 }}>
+              Select a friend or room to start chatting.
+            </div>
+          </div>
+        )}
+        {/* Chat UI */}
+        {activeRoom && (
+          <>
+            <div
+              style={{
+                flex: 1,
+                overflowY: "auto",
+                padding: 24,
+                background: "#18181b",
+              }}
+            >
+              {messages.length === 0 ? (
+                <div
+                  style={{ color: "#888", textAlign: "center", marginTop: 40 }}
+                >
+                  No messages yet. Start the conversation!
                 </div>
               ) : (
                 messages.map((message) => (
@@ -420,41 +399,24 @@ export default function ChatApp() {
                       display: "flex",
                       justifyContent:
                         message.sender === "me" ? "flex-end" : "flex-start",
-                      marginBottom: "10px",
+                      marginBottom: 18,
                     }}
                   >
                     <div
                       style={{
                         maxWidth: "70%",
-                        padding: "10px",
-                        borderRadius: "10px",
-                        backgroundColor:
-                          message.sender === "me" ? "#007bff" : "#f1f1f1",
-                        color: message.sender === "me" ? "white" : "black",
+                        padding: "12px 16px",
+                        borderRadius: 18,
+                        background:
+                          message.sender === "me" ? "#007bff" : "#23232a",
+                        color: "#fff",
                       }}
                     >
-                      {message.senderName && (
-                        <div
-                          style={{
-                            fontSize: "12px",
-                            fontWeight: "bold",
-                            marginBottom: "5px",
-                          }}
-                        >
-                          {message.senderName}
-                        </div>
-                      )}
                       <div>{message.text}</div>
-                      <div
-                        style={{
-                          fontSize: "11px",
-                          opacity: 0.7,
-                          marginTop: "5px",
-                        }}
-                      >
+                      <div style={{ fontSize: 11, opacity: 0.7, marginTop: 5 }}>
                         {message.timestamp}
                         {message.sender === "me" && (
-                          <span style={{ marginLeft: "5px" }}>✓✓</span>
+                          <span style={{ marginLeft: 5 }}>✓</span>
                         )}
                       </div>
                     </div>
@@ -463,177 +425,93 @@ export default function ChatApp() {
               )}
               <div ref={messageEndRef} />
             </div>
-
-            {/* Message Input Area */}
-            <div style={{ padding: "15px", borderTop: "1px solid #ccc" }}>
-              {/* Connection Error Display */}
-              {!isConnected && (
-                <div
-                  style={{
-                    padding: "8px",
-                    backgroundColor: "#fff3cd",
-                    border: "1px solid #ffeaa7",
-                    borderRadius: "4px",
-                    marginBottom: "10px",
-                    fontSize: "14px",
-                    color: "#856404",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                  }}
-                >
-                  <span>
-                    {connectionError || "Disconnected from chat"}
-                    {pendingMessagesCount > 0 && (
-                      <span style={{ marginLeft: "10px", fontSize: "12px" }}>
-                        ({pendingMessagesCount} message
-                        {pendingMessagesCount > 1 ? "s" : ""} will be sent when
-                        reconnected)
-                      </span>
-                    )}
-                  </span>
-                  <button
-                    onClick={retryConnection}
-                    style={{
-                      fontSize: "12px",
-                      padding: "4px 8px",
-                      backgroundColor: "#007bff",
-                      color: "white",
-                      border: "none",
-                      borderRadius: "3px",
-                      cursor: "pointer",
-                    }}
-                  >
-                    Retry Now
-                  </button>
-                </div>
-              )}
-
-              {/* Last Error Display */}
+            {/* Encryption Status */}
+            {aesKey && (
+              <div
+                style={{
+                  padding: "10px 24px",
+                  background: "#23232a",
+                  borderTop: "1px solid #222",
+                  fontSize: 12,
+                  color: "#22c55e",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 5,
+                }}
+              >
+                <span>🔒</span>
+                <span>Messages are end-to-end encrypted</span>
+              </div>
+            )}
+            {/* Input Area */}
+            <div
+              style={{
+                padding: 24,
+                background: "#23232a",
+                borderTop: "1px solid #222",
+              }}
+            >
               {lastError && (
                 <div
                   style={{
-                    padding: "8px",
-                    backgroundColor: "#f8d7da",
-                    border: "1px solid #f5c6cb",
-                    borderRadius: "4px",
-                    marginBottom: "10px",
-                    fontSize: "14px",
-                    color: "#721c24",
+                    padding: 10,
+                    background: "#4d1a1a",
+                    borderRadius: 5,
+                    marginBottom: 10,
+                    fontSize: 12,
+                    color: "#ff6b6b",
                   }}
                 >
                   {lastError.message}
-                  {lastError.type === "send_message" &&
-                    lastError.details?.queued && (
-                      <span style={{ fontSize: "12px", marginLeft: "10px" }}>
-                        (Message queued for retry)
-                      </span>
-                    )}
                 </div>
               )}
-
-              <div
-                style={{ display: "flex", gap: "10px", alignItems: "flex-end" }}
-              >
+              <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
                 <textarea
                   value={messageInput}
                   onChange={(e) => setMessageInput(e.target.value)}
                   onKeyPress={handleKeyPress}
                   placeholder={
-                    isConnected ? "Type a message..." : "Connecting to chat..."
+                    isConnected ? "Type a message..." : "Connecting..."
                   }
                   disabled={!isConnected}
                   style={{
                     flex: 1,
-                    padding: "10px",
-                    border: "1px solid #ccc",
-                    borderRadius: "4px",
+                    padding: 12,
+                    border: "1px solid #444",
+                    borderRadius: 20,
+                    background: "#18181b",
+                    color: "#fff",
                     resize: "none",
-                    minHeight: "40px",
-                    maxHeight: "100px",
-                    backgroundColor: isConnected ? "white" : "#f8f9fa",
-                    opacity: isConnected ? 1 : 0.7,
+                    minHeight: 20,
+                    maxHeight: 100,
+                    outline: "none",
                   }}
                   rows={1}
                 />
-
                 <button
                   onClick={sendMessage}
-                  disabled={!messageInput.trim()}
+                  disabled={!messageInput.trim() || !isConnected}
                   style={{
-                    padding: "10px 20px",
-                    backgroundColor: !messageInput.trim()
-                      ? "#6c757d"
-                      : isConnected
-                      ? "#007bff"
-                      : "#ffc107",
-                    color: "white",
+                    padding: "12px 20px",
+                    background:
+                      !messageInput.trim() || !isConnected ? "#444" : "#007bff",
+                    color: "#fff",
                     border: "none",
-                    borderRadius: "4px",
-                    cursor: !messageInput.trim() ? "not-allowed" : "pointer",
+                    borderRadius: 20,
+                    cursor:
+                      !messageInput.trim() || !isConnected
+                        ? "not-allowed"
+                        : "pointer",
+                    fontWeight: "bold",
                   }}
-                  title={
-                    !isConnected
-                      ? "Message will be queued and sent when reconnected"
-                      : "Send message"
-                  }
                 >
-                  {isConnected ? "Send" : "Queue"}
+                  Send
                 </button>
               </div>
             </div>
           </>
-        ) : (
-          <div
-            style={{
-              flex: 1,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "#666",
-            }}
-          >
-            Select a conversation to start chatting
-          </div>
         )}
       </div>
-
-      {/* Settings Panel */}
-      {showSettings && (
-        <div
-          style={{
-            position: "absolute",
-            top: "80px",
-            left: "20px",
-            width: "250px",
-            backgroundColor: "white",
-            border: "1px solid #ccc",
-            borderRadius: "4px",
-            padding: "15px",
-            boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
-          }}
-        >
-          <h3>Settings</h3>
-          <div style={{ marginBottom: "10px" }}>
-            <label>
-              <input type="checkbox" /> Notifications
-            </label>
-          </div>
-          <div style={{ marginBottom: "10px" }}>
-            <label>
-              <input type="checkbox" /> Sound
-            </label>
-          </div>
-          <div style={{ marginBottom: "10px" }}>
-            <label>Theme:</label>
-            <select style={{ marginLeft: "5px" }}>
-              <option>Light</option>
-              <option>Dark</option>
-            </select>
-          </div>
-          <button onClick={() => setShowSettings(false)}>Close</button>
-        </div>
-      )}
     </div>
   );
 }

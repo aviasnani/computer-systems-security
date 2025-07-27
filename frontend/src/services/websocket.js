@@ -33,6 +33,7 @@ class WebSocketService {
 
     this.socket = io(serverUrl, {
       auth: {
+        user_id: userId,
         userId,
         token,
       },
@@ -62,7 +63,7 @@ class WebSocketService {
   joinRoom(roomId) {
     if (this.socket && this.isConnected) {
       // Get user_id from auth data stored during connection
-      const userId = this.socket.auth?.userId;
+      const userId = this.socket.auth?.user_id || this.socket.auth?.userId;
       this.socket.emit("join_room", {
         room_id: roomId,
         user_id: userId,
@@ -81,7 +82,7 @@ class WebSocketService {
   leaveRoom(roomId) {
     if (this.socket && this.isConnected) {
       // Get user_id from auth data stored during connection
-      const userId = this.socket.auth?.userId;
+      const userId = this.socket.auth?.user_id || this.socket.auth?.userId;
       this.socket.emit("leave_room", {
         room_id: roomId,
         user_id: userId,
@@ -100,7 +101,7 @@ class WebSocketService {
    */
   sendMessage(roomId, message) {
     const messageData = {
-      sender_id: this.socket?.auth?.userId,
+      sender_id: this.socket?.auth?.user_id || this.socket?.auth?.userId,
       room_id: roomId,
       content: message,
       message_type: "text",

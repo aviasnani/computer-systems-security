@@ -16,6 +16,7 @@ export const useChat = (roomId, userId, token, aesKey) => {
   // Handle incoming messages
   const handleMessage = useCallback(
     async (messageData) => {
+      console.log('Received message:', messageData);
       let content = messageData.content;
 
       // Try to decrypt if it's encrypted
@@ -27,13 +28,14 @@ export const useChat = (roomId, userId, token, aesKey) => {
             encrypted.iv,
             aesKey
           );
+          console.log('Decrypted message:', content);
         } catch (e) {
-          // Not encrypted or decryption failed
+          console.log('Decryption failed or not encrypted:', e);
         }
       }
 
       const newMessage = {
-        id: messageData.id || Date.now(),
+        id: messageData.message_id || messageData.id || Date.now(),
         text: content,
         sender: messageData.sender_id === userId ? "me" : "other",
         timestamp: new Date().toLocaleTimeString([], {
@@ -41,6 +43,7 @@ export const useChat = (roomId, userId, token, aesKey) => {
           minute: "2-digit",
         }),
       };
+      console.log('Adding message to UI:', newMessage);
       setMessages((prev) => [...prev, newMessage]);
     },
     [userId, aesKey]

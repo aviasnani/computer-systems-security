@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import CryptoService from "../services/cryptoService";
+import { auth } from "../firebase.config";
 
 export const useKeyManagement = (userId) => {
   const [rsaKeys, setRsaKeys] = useState(null);
@@ -37,9 +38,18 @@ export const useKeyManagement = (userId) => {
 
   const sendPublicKeyToServer = async (publicKey) => {
     try {
-      const response = await fetch("/api/users/public-key", {
+      // Get Firebase token
+      const user = auth.currentUser;
+      if (!user) return;
+      
+      const token = await user.getIdToken();
+      
+      const response = await fetch("http://localhost:5000/api/public-key", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
         body: JSON.stringify({ publicKey }),
       });
       if (!response.ok) throw new Error("Failed to upload public key");
