@@ -24,23 +24,24 @@ class SocketHandler:
         @self.socketio.on('relay_message')
         def handle_message(data):
             """
-            Relay encrypted messages between users
+            Relay messages between users - updated for room-based model
             """
             try:
-                # Store encrypted message
+                
                 message = Message(
                     sender_id=data['sender_id'],
-                    recipient_id=data['recipient_id'],
-                    encrypted_message=data['encrypted_message'],
+                    room_id=data.get('room_id', 'general'),  
+                    content=data.get('content', data.get('encrypted_message', '')), 
                     message_type=data.get('message_type', 'text')
                 )
                 
                 db.session.add(message)
                 db.session.commit()
                 
-                # Relay to recipient
-                recipient_room = f"user_{message.recipient_id}"
-                emit('new_message', message.to_dict(), room=recipient_room)
+                recipient_id = data.get('recipient_id')
+                if recipient_id:
+                    recipient_room = f"user_{recipient_id}"
+                    emit('new_message', message.to_dict(), room=recipient_room)
                 
                 return {'status': 'sent', 'message_id': message.id}
                 
