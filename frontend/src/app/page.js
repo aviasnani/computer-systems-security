@@ -3,10 +3,12 @@ import React, { useState, useRef, useEffect } from "react";
 import Login from "./components/Login";
 import { useAuth } from "../context/AuthContext";
 import { useChat } from "../hooks/useChat";
+import { useKeyManagement } from "../hooks/useKeyManagement";
+import CryptoService from "../services/cryptoService";
 
 export default function ChatApp() {
   const { currentUser, loading } = useAuth();
-
+  const { rsaKeys, aesKey, isGenerating } = useKeyManagement(currentUser?.uid);
   // Default room for this implementation
   const defaultRoomId = "general";
 
@@ -53,13 +55,27 @@ export default function ChatApp() {
     messageEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const sendMessage = () => {
+  const sendMessage = async () => {
     if (messageInput.trim()) {
-      const result = sendWebSocketMessage(messageInput);
+      let messageToSend = messageInput.trim();
+
+      // Encrypt if keys available
+      if (aesKey) {
+        try {
+          const encrypted = await CryptoService.encryptWithAES(
+            messageToSend,
+            aesKey
+          );
+          messageToSend = JSON.stringify(encrypted);
+        } catch (error) {
+          console.error("Encryption failed:", error);
+        }
+      }
+
+      const result = sendWebSocketMessage(messageToSend);
       if (result?.success || result?.queued) {
         setMessageInput("");
       }
-      // Error handling is now managed by the hook and displayed in UI
     }
   };
 
@@ -74,7 +90,7 @@ export default function ChatApp() {
     conv.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  if (loading) {
+  if (loading || isGenerating) {
     return (
       <div
         style={{
@@ -84,7 +100,7 @@ export default function ChatApp() {
           height: "100vh",
         }}
       >
-        <div>Loading...</div>
+        <div>{loading ? "Loading..." : "Generating encryption keys..."}</div>
       </div>
     );
   }
