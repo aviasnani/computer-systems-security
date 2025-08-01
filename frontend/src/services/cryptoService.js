@@ -12,9 +12,8 @@ class CryptoService {
   
     static async generateRSAKeyPair() {
         try {
-            console.log('Generating RSA key pair with Web Crypto API...');
+            console.log('Generating RSA-2048 key pair...');
             
-            // Generate key pair for both encryption and signing
             const keyPair = await crypto.subtle.generateKey(
                 {
                     name: 'RSA-OAEP',
@@ -26,7 +25,6 @@ class CryptoService {
                 ['encrypt', 'decrypt']
             );
             
-            // Export keys to PEM format
             const publicKeyBuffer = await crypto.subtle.exportKey('spki', keyPair.publicKey);
             const privateKeyBuffer = await crypto.subtle.exportKey('pkcs8', keyPair.privateKey);
             
@@ -34,6 +32,9 @@ class CryptoService {
             const privateKeyPem = this._arrayBufferToPem(privateKeyBuffer, 'PRIVATE KEY');
             
             console.log('RSA key pair generated successfully');
+            console.log('Public key length:', publicKeyPem.length);
+            console.log('Private key length:', privateKeyPem.length);
+            
             return {
                 publicKey: publicKeyPem,
                 privateKey: privateKeyPem
