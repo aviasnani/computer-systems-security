@@ -282,9 +282,11 @@ class KeyStorageService {
       return false;
     }
 
-    // Check for basic RSA private key PEM format
-    const pemRegex = /^-----BEGIN RSA PRIVATE KEY-----[\s\S]*-----END RSA PRIVATE KEY-----$/;
-    return pemRegex.test(privateKey.trim());
+    // Check for both PKCS#1 and PKCS#8 private key PEM formats
+    const pkcs1Regex = /^-----BEGIN RSA PRIVATE KEY-----[\s\S]*-----END RSA PRIVATE KEY-----$/;
+    const pkcs8Regex = /^-----BEGIN PRIVATE KEY-----[\s\S]*-----END PRIVATE KEY-----$/;
+    
+    return pkcs1Regex.test(privateKey.trim()) || pkcs8Regex.test(privateKey.trim());
   }
 
   /**

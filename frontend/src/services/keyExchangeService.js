@@ -87,6 +87,8 @@ class KeyExchangeService {
 
       // Upload public key to server with version
       console.log('🔄 [KEY_INIT] 📤 Uploading public key to server...');
+      console.log('🔄 [KEY_INIT] Public key to upload:', this.myPublicKey?.substring(0, 100) + '...');
+      
       const response = await fetch(
         `${this.BACKEND_URL}/api/users/${userId}/public-key`,
         {
@@ -103,9 +105,13 @@ class KeyExchangeService {
       );
 
       if (!response.ok) {
-        console.error('🔄 [KEY_INIT] ❌ Failed to upload public key to server');
-        throw new Error("Failed to upload public key");
+        const errorText = await response.text();
+        console.error('🔄 [KEY_INIT] ❌ Failed to upload public key to server:', errorText);
+        throw new Error(`Failed to upload public key: ${response.status}`);
       }
+      
+      const uploadResult = await response.json();
+      console.log('🔄 [KEY_INIT] ✅ Public key upload result:', uploadResult);
 
       console.log('🔄 [KEY_INIT] ✅ Public key uploaded to server successfully');
       console.log('🔄 [KEY_INIT] 🎉 Keys initialized, validated, and uploaded successfully!');
@@ -421,8 +427,10 @@ class KeyExchangeService {
     if (!privateKey || typeof privateKey !== 'string') {
       return false;
     }
-    const pemRegex = /^-----BEGIN RSA PRIVATE KEY-----[\s\S]*-----END RSA PRIVATE KEY-----$/;
-    return pemRegex.test(privateKey.trim());
+    // Accept both PKCS#1 and PKCS#8 formats
+    const pkcs1Regex = /^-----BEGIN RSA PRIVATE KEY-----[\s\S]*-----END RSA PRIVATE KEY-----$/;
+    const pkcs8Regex = /^-----BEGIN PRIVATE KEY-----[\s\S]*-----END PRIVATE KEY-----$/;
+    return pkcs1Regex.test(privateKey.trim()) || pkcs8Regex.test(privateKey.trim());
   }
 
   /**
@@ -430,15 +438,25 @@ class KeyExchangeService {
    */
   async _validateKeyPairMatch(publicKey, privateKey) {
     try {
+      console.log('Validating key pair match...');
+      console.log('Public key format check:', publicKey?.includes('-----BEGIN PUBLIC KEY-----'));
+      console.log('Private key format check:', privateKey?.includes('-----BEGIN RSA PRIVATE KEY-----'));
+      
       const CryptoService = (await import("./cryptoService.js")).default;
-      const testData = "keypair_match_test";
+      const testData = "test";
 
-      // Encrypt with public key and decrypt with private key
+      console.log('Testing encryption with public key...');
       const encrypted = await CryptoService.encryptWithRSA(testData, publicKey);
+      console.log('Encryption successful, testing decryption...');
+      
       const decrypted = await CryptoService.decryptWithRSA(encrypted, privateKey);
-
-      return decrypted === testData;
+      console.log('Decryption result:', decrypted);
+      
+      const isMatch = decrypted === testData;
+      console.log('Key pair validation result:', isMatch);
+      return isMatch;
     } catch (error) {
+      console.error('Key pair validation failed:', error);
       return false;
     }
   }
