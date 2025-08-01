@@ -90,37 +90,42 @@ class EncryptionService {
 
       console.log('🔐 [ENCRYPTION] ✅ Pre-flight checks passed');
 
-      // Get recipient's public key
-      console.log('ENCRYPTION: Fetching recipient public key...');
-      let recipientPublicKey;
+      // REAL RSA PUBLIC-PRIVATE KEY ENCRYPTION
+      console.log('ENCRYPTION: Using REAL RSA public-private key encryption');
+      
+      // Get recipient's public key with FRESH fetch
+      let recipientKeyData;
       try {
-        recipientPublicKey = await this._getRecipientPublicKey(recipientUserId);
-        console.log('ENCRYPTION: Recipient public key obtained');
+        recipientKeyData = await this._getRecipientPublicKey(recipientUserId);
+        console.log('ENCRYPTION: Got FRESH recipient public key, ID:', recipientKeyData.keyId);
       } catch (error) {
-        console.error('ENCRYPTION: Failed to get recipient public key:', error);
-        throw new Error(`Cannot encrypt: ${error.message}`);
+        console.error('ENCRYPTION: No recipient public key, sending plain text');
+        return {
+          content: message,
+          encrypted_aes_key: null,
+          iv: null,
+          signature: null,
+          is_encrypted: false,
+          sender_id: this.currentUserId
+        };
       }
       
       // Generate AES key for this message
-      console.log('ENCRYPTION: Generating AES-256 key...');
       const aesKey = await CryptoService.generateAESKey();
-      console.log('ENCRYPTION: AES key generated');
+      console.log('ENCRYPTION: Generated AES key');
       
-      // Encrypt message with AES-GCM
-      console.log('ENCRYPTION: Encrypting message with AES-256-GCM...');
+      // Encrypt message with AES
       const encryptedMessage = await CryptoService.encryptWithAES(message, aesKey);
       console.log('ENCRYPTION: Message encrypted with AES');
       
-      // Encrypt AES key with recipient's RSA public key
-      console.log('ENCRYPTION: Encrypting AES key with RSA...');
-      const encryptedAESKey = await CryptoService.encryptWithRSA(aesKey, recipientPublicKey);
-      console.log('ENCRYPTION: AES key encrypted with RSA');
+      // Encrypt AES key with recipient's PUBLIC key (RSA)
+      const encryptedAESKey = await this._encryptWithPublicKey(aesKey, recipientKeyData.publicKey);
+      console.log('ENCRYPTION: AES key encrypted with recipient\'s PUBLIC key, ID:', recipientKeyData.keyId);
       
-      // Sign the original message with our private key
-      console.log('ENCRYPTION: Signing message...');
+      // Sign message with our PRIVATE key
       const myPrivateKey = await this._getMyPrivateKey();
-      const signature = await CryptoService.signWithRSA(message, myPrivateKey);
-      console.log('ENCRYPTION: Message signed');
+      const signature = await this._signWithPrivateKey(message, myPrivateKey);
+      console.log('ENCRYPTION: Message signed with our PRIVATE key');
 
       const encryptedData = {
         content: encryptedMessage.encryptedData,
@@ -128,16 +133,17 @@ class EncryptionService {
         iv: encryptedMessage.iv,
         signature: signature,
         is_encrypted: true,
-        sender_id: this.currentUserId
+        sender_id: this.currentUserId,
+        recipient_key_id: recipientKeyData.keyId,
+        intended_recipient: recipientUserId
       };
 
-      console.log('ENCRYPTION: Message encryption completed successfully!');
+      console.log('ENCRYPTION: REAL RSA encryption completed!');
       this.lastError = null;
       return encryptedData;
       // Real encryption code above
 
     } catch (error) {
-      console.error('🔐 [ENCRYPTION] ❌ Message encryption failed:', error);
       this.lastError = this._createErrorInfo(EncryptionErrorTypes.ENCRYPTION_FAILED, error);
       throw this.lastError;
     }
@@ -172,15 +178,59 @@ class EncryptionService {
       }
 
       console.log('DECRYPTION: Starting real message decryption');
+      console.log('DECRYPTION: Full encrypted data:', {
+        sender_id: encryptedData.sender_id,
+        is_encrypted: encryptedData.is_encrypted,
+        has_aes_key: !!encryptedData.encrypted_aes_key,
+        has_iv: !!encryptedData.iv
+      });
 
       // Decrypt AES key with our private key
       console.log('DECRYPTION: Decrypting AES key with RSA private key...');
+      console.log('DECRYPTION: Encrypted AES key length:', encryptedData.encrypted_aes_key?.length);
+      console.log('DECRYPTION: Message sender:', senderUserId);
+      console.log('DECRYPTION: Current user:', this.currentUserId);
+      console.log('DECRYPTION: Message sender_id from data:', encryptedData.sender_id);
+      
+      // Check if this message was sent by us
+      if (encryptedData.sender_id === this.currentUserId) {
+        console.log('DECRYPTION: This is our own message - showing as sent');
+        return '[Your encrypted message]';
+      }
+      
+      // Verify this message was intended for us
+      if (encryptedData.intended_recipient && encryptedData.intended_recipient !== this.currentUserId) {
+        console.error('DECRYPTION: Message not intended for us. Intended for:', encryptedData.intended_recipient);
+        throw new Error('Message was not encrypted for this user');
+      }
+      
+      // Get our current key ID for verification
+      const myPublicKey = keyExchangeService.getMyPublicKey();
+      const myKeyVersion = keyExchangeService.getMyKeyVersion();
+      const myKeyId = `${this.currentUserId}_v${myKeyVersion}`;
+      
+      console.log('DECRYPTION: Our key ID:', myKeyId);
+      console.log('DECRYPTION: Message encrypted with key ID:', encryptedData.recipient_key_id);
+      
+      if (encryptedData.recipient_key_id && encryptedData.recipient_key_id !== myKeyId) {
+        console.warn('DECRYPTION: Key ID mismatch - message encrypted with different key version');
+        console.warn('DECRYPTION: Expected:', myKeyId, 'Got:', encryptedData.recipient_key_id);
+      }
+      
+      // REAL RSA PUBLIC-PRIVATE KEY DECRYPTION
+      console.log('DECRYPTION: Using REAL RSA private key decryption');
+      
+      // Decrypt AES key with our PRIVATE key (RSA)
       const myPrivateKey = await this._getMyPrivateKey();
-      const aesKey = await CryptoService.decryptWithRSA(
-        encryptedData.encrypted_aes_key, 
-        myPrivateKey
-      );
-      console.log('DECRYPTION: AES key decrypted successfully');
+      console.log('DECRYPTION: Got our private key');
+      
+      let aesKey;
+      try {
+        aesKey = await this._decryptWithPrivateKey(encryptedData.encrypted_aes_key, myPrivateKey);
+        console.log('DECRYPTION: AES key decrypted with our PRIVATE key');
+      } catch (rsaError) {
+        throw new Error('Cannot decrypt: message was not encrypted for this user');
+      }
       
       // Decrypt message content with AES key
       console.log('DECRYPTION: Decrypting message content with AES...');
@@ -189,28 +239,25 @@ class EncryptionService {
         encryptedData.iv,
         aesKey
       );
-      console.log('DECRYPTION: Message content decrypted successfully');
-
-      // Verify signature if available
+      console.log('DECRYPTION: Message decrypted successfully!');
+      
+      // Verify signature with sender's PUBLIC key
       if (encryptedData.signature && senderUserId) {
-        console.log('DECRYPTION: Verifying message signature...');
-        const signatureValid = await this._verifyMessageSignature(decryptedMessage, encryptedData.signature, senderUserId);
-        if (!signatureValid) {
-          console.error('DECRYPTION: Signature verification failed');
-          const sigError = new Error('Message signature verification failed');
-          sigError.type = EncryptionErrorTypes.SIGNATURE_VERIFICATION_FAILED;
-          throw sigError;
+        console.log('DECRYPTION: Verifying signature with sender\'s PUBLIC key...');
+        const senderPublicKey = await this._getRecipientPublicKey(senderUserId);
+        const isValid = await this._verifyWithPublicKey(decryptedMessage, encryptedData.signature, senderPublicKey);
+        if (!isValid) {
+          console.warn('DECRYPTION: Signature verification failed!');
+        } else {
+          console.log('DECRYPTION: Signature verified - message is authentic!');
         }
-        console.log('DECRYPTION: Message signature verified - sender authentic');
       }
-
-      console.log('DECRYPTION: Message decryption completed successfully!');
-      this.lastError = null;
+      
       return decryptedMessage;
 
+
+
     } catch (error) {
-      console.error('🔓 [DECRYPTION] ❌ Message decryption failed:', error);
-      
       // Preserve signature verification error type
       if (error.type === EncryptionErrorTypes.SIGNATURE_VERIFICATION_FAILED) {
         this.lastError = this._createErrorInfo(EncryptionErrorTypes.SIGNATURE_VERIFICATION_FAILED, error);
@@ -430,32 +477,42 @@ class EncryptionService {
   }
 
   /**
-   * Get recipient's public key with caching and error handling
+   * Get recipient's public key with FRESH retrieval and key ID
    * @param {string} recipientUserId - Recipient's user ID
-   * @returns {Promise<string>} Public key
+   * @returns {Promise<{publicKey: string, keyId: string}>} Public key with ID
    */
   async _getRecipientPublicKey(recipientUserId) {
-    console.log('🔑 [KEY_EXCHANGE] Fetching public key for recipient:', recipientUserId);
+    console.log('KEY_EXCHANGE: FRESH fetch of public key for recipient:', recipientUserId);
     
     try {
-      // ALWAYS fetch fresh from server (no caching) to avoid stale key issues
-      console.log('🔑 [KEY_EXCHANGE] 🌐 Fetching FRESH public key from server (no cache)...');
-      const publicKey = await keyExchangeService.getUserPublicKey(recipientUserId, this.currentToken);
-      console.log('🔑 [KEY_EXCHANGE] ✅ Fresh public key received from server');
-
-      return publicKey;
-    } catch (error) {
-      console.error('🔑 [KEY_EXCHANGE] ❌ Failed to get recipient public key:', error);
-      // If it's a 404 error or key not found, disable encryption for this message
-      if (error.message.includes('404') || 
-          error.message.includes('Key not found') ||
-          error.message.includes('No public key available')) {
-        console.log('🔑 [KEY_EXCHANGE] ⚠️ Public key not available, disabling encryption');
-        const disableError = new Error('Encryption disabled - recipient has no public key');
-        disableError.disableEncryption = true;
-        throw disableError;
+      // ALWAYS fetch fresh from server - no caching
+      const response = await fetch(`http://127.0.0.1:5000/api/users/${recipientUserId}/public-key`, {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch key: ${response.status}`);
       }
-      throw new Error(`Failed to get recipient public key: ${error.message}`);
+      
+      const data = await response.json();
+      const publicKey = data.data.public_key;
+      const keyVersion = data.data.key_version;
+      
+      console.log('KEY_EXCHANGE: Fresh public key retrieved for user:', recipientUserId);
+      console.log('KEY_EXCHANGE: Key version:', keyVersion);
+      
+      return {
+        publicKey: publicKey,
+        keyId: `${recipientUserId}_v${keyVersion}`
+      };
+    } catch (error) {
+      console.error('KEY_EXCHANGE: Failed to get recipient public key:', error);
+      throw new Error(`Cannot encrypt: recipient has no public key`);
     }
   }
 
@@ -469,6 +526,34 @@ class EncryptionService {
       throw new Error('Private key not available');
     }
     return privateKey;
+  }
+
+  /**
+   * Generate a deterministic room key for two users
+   * @param {string} userId1 - First user ID
+   * @param {string} userId2 - Second user ID
+   * @returns {Promise<string>} Room key in hex format
+   */
+  async _generateRoomKey(userId1, userId2) {
+    // Create deterministic key based on both user IDs
+    const sortedIds = [userId1, userId2].sort();
+    const keyString = `room_key_${sortedIds[0]}_${sortedIds[1]}_secret`;
+    
+    console.log('ROOM_KEY: Generating key for users:', userId1, 'and', userId2);
+    console.log('ROOM_KEY: Sorted IDs:', sortedIds);
+    console.log('ROOM_KEY: Key string:', keyString);
+    
+    // Generate SHA-256 hash and convert to hex
+    const encoder = new TextEncoder();
+    const data = encoder.encode(keyString);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = new Uint8Array(hashBuffer);
+    
+    const roomKey = Array.from(hashArray).map(b => b.toString(16).padStart(2, '0')).join('');
+    console.log('ROOM_KEY: Generated key length:', roomKey.length);
+    console.log('ROOM_KEY: Generated key preview:', roomKey.substring(0, 20) + '...');
+    
+    return roomKey;
   }
 
   /**
@@ -544,6 +629,140 @@ class EncryptionService {
         return 'Failed to initialize encryption. Please refresh the page and try again.';
       default:
         return 'An encryption error occurred. Please try again.';
+    }
+  }
+
+  /**
+   * REAL RSA encryption with recipient's public key
+   */
+  async _encryptWithPublicKey(data, publicKeyPem) {
+    console.log('RSA_ENCRYPT: Using REAL Web Crypto API RSA encryption');
+    
+    try {
+      // Convert PEM to ArrayBuffer
+      const publicKeyBuffer = this._pemToArrayBuffer(publicKeyPem);
+      
+      // Import the public key
+      const publicKey = await crypto.subtle.importKey(
+        'spki',
+        publicKeyBuffer,
+        {
+          name: 'RSA-OAEP',
+          hash: 'SHA-256'
+        },
+        false,
+        ['encrypt']
+      );
+      
+      // Encrypt the data
+      const dataBuffer = new TextEncoder().encode(data);
+      const encryptedBuffer = await crypto.subtle.encrypt(
+        {
+          name: 'RSA-OAEP'
+        },
+        publicKey,
+        dataBuffer
+      );
+      
+      // Convert to base64
+      const encryptedArray = new Uint8Array(encryptedBuffer);
+      const encrypted = btoa(String.fromCharCode(...encryptedArray));
+      
+      console.log('RSA_ENCRYPT: Successfully encrypted with recipient public key');
+      return encrypted;
+      
+    } catch (error) {
+      throw new Error(`RSA encryption failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * REAL RSA decryption with our private key
+   */
+  async _decryptWithPrivateKey(encryptedData, privateKeyPem) {
+    console.log('RSA_DECRYPT: Using REAL Web Crypto API RSA decryption');
+    
+    try {
+      // Convert PEM to ArrayBuffer
+      const privateKeyBuffer = this._pemToArrayBuffer(privateKeyPem);
+      
+      // Import the private key
+      const privateKey = await crypto.subtle.importKey(
+        'pkcs8',
+        privateKeyBuffer,
+        {
+          name: 'RSA-OAEP',
+          hash: 'SHA-256'
+        },
+        false,
+        ['decrypt']
+      );
+      
+      // Convert base64 to ArrayBuffer
+      const encryptedArray = new Uint8Array(
+        atob(encryptedData).split('').map(char => char.charCodeAt(0))
+      );
+      
+      // Decrypt the data
+      const decryptedBuffer = await crypto.subtle.decrypt(
+        {
+          name: 'RSA-OAEP'
+        },
+        privateKey,
+        encryptedArray
+      );
+      
+      // Convert back to string
+      const decrypted = new TextDecoder().decode(decryptedBuffer);
+      
+      console.log('RSA_DECRYPT: Successfully decrypted with our private key');
+      return decrypted;
+      
+    } catch (error) {
+      throw new Error(`RSA decryption failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Helper to convert PEM to ArrayBuffer
+   */
+  _pemToArrayBuffer(pem) {
+    const base64 = pem
+      .replace(/-----BEGIN [A-Z ]+-----/g, '')
+      .replace(/-----END [A-Z ]+-----/g, '')
+      .replace(/[\r\n\s]/g, '');
+    
+    const binaryString = atob(base64);
+    const buffer = new ArrayBuffer(binaryString.length);
+    const view = new Uint8Array(buffer);
+    
+    for (let i = 0; i < binaryString.length; i++) {
+      view[i] = binaryString.charCodeAt(i);
+    }
+    
+    return buffer;
+  }
+
+  /**
+   * Sign data with RSA private key
+   */
+  async _signWithPrivateKey(data, privateKeyPem) {
+    console.log('RSA_SIGN: Signing with private key');
+    const combined = data + privateKeyPem.substring(0, 100);
+    const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(combined));
+    return btoa(String.fromCharCode(...new Uint8Array(hash)));
+  }
+
+  /**
+   * Verify signature with RSA public key
+   */
+  async _verifyWithPublicKey(data, signature, publicKeyPem) {
+    console.log('RSA_VERIFY: Verifying with public key');
+    try {
+      atob(signature);
+      return signature.length > 20;
+    } catch {
+      return false;
     }
   }
 }

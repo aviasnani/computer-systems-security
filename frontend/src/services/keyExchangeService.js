@@ -86,8 +86,8 @@ class KeyExchangeService {
       console.log('🔄 [KEY_INIT] ✅ Private key stored securely');
 
       // Upload public key to server with version
-      console.log('🔄 [KEY_INIT] 📤 Uploading public key to server...');
-      console.log('🔄 [KEY_INIT] Public key to upload:', this.myPublicKey?.substring(0, 100) + '...');
+      console.log('KEY_INIT: Uploading public key to server...');
+      console.log('KEY_INIT: Public key preview:', this.myPublicKey?.substring(0, 100) + '...');
       
       const response = await fetch(
         `${this.BACKEND_URL}/api/users/${userId}/public-key`,
@@ -106,12 +106,12 @@ class KeyExchangeService {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('🔄 [KEY_INIT] ❌ Failed to upload public key to server:', errorText);
-        throw new Error(`Failed to upload public key: ${response.status}`);
+        console.error('KEY_INIT: Failed to upload public key:', response.status, errorText);
+        throw new Error(`Failed to upload public key: ${response.status} - ${errorText}`);
       }
       
       const uploadResult = await response.json();
-      console.log('🔄 [KEY_INIT] ✅ Public key upload result:', uploadResult);
+      console.log('KEY_INIT: Public key uploaded successfully:', uploadResult.status);
 
       console.log('🔄 [KEY_INIT] ✅ Public key uploaded to server successfully');
       console.log('🔄 [KEY_INIT] 🎉 Keys initialized, validated, and uploaded successfully!');
@@ -212,6 +212,13 @@ class KeyExchangeService {
    */
   getMyPublicKey() {
     return this.myPublicKey;
+  }
+  
+  /**
+   * Get my key version
+   */
+  getMyKeyVersion() {
+    return this.myKeyVersion || 1;
   }
 
   /**
