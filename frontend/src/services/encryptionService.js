@@ -90,25 +90,51 @@ class EncryptionService {
 
       console.log('🔐 [ENCRYPTION] ✅ Pre-flight checks passed');
 
-      // For now, use simple encryption simulation
-      console.log('ENCRYPTION: Using simple encryption simulation');
+      // Get recipient's public key
+      console.log('ENCRYPTION: Fetching recipient public key...');
+      let recipientPublicKey;
+      try {
+        recipientPublicKey = await this._getRecipientPublicKey(recipientUserId);
+        console.log('ENCRYPTION: Recipient public key obtained');
+      } catch (error) {
+        console.error('ENCRYPTION: Failed to get recipient public key:', error);
+        throw new Error(`Cannot encrypt: ${error.message}`);
+      }
       
-      // Generate a simple "encrypted" message (base64 encoded)
-      const simpleEncrypted = btoa(message);
+      // Generate AES key for this message
+      console.log('ENCRYPTION: Generating AES-256 key...');
+      const aesKey = await CryptoService.generateAESKey();
+      console.log('ENCRYPTION: AES key generated');
       
-      // Generate proper base64 mock values
-      const mockAESKey = btoa('mock_aes_key_' + Date.now());
-      const mockIV = btoa('mock_iv_' + Date.now());
+      // Encrypt message with AES-GCM
+      console.log('ENCRYPTION: Encrypting message with AES-256-GCM...');
+      const encryptedMessage = await CryptoService.encryptWithAES(message, aesKey);
+      console.log('ENCRYPTION: Message encrypted with AES');
       
-      return {
-        content: simpleEncrypted,
-        encrypted_aes_key: mockAESKey,
-        iv: mockIV,
-        signature: null,
+      // Encrypt AES key with recipient's RSA public key
+      console.log('ENCRYPTION: Encrypting AES key with RSA...');
+      const encryptedAESKey = await CryptoService.encryptWithRSA(aesKey, recipientPublicKey);
+      console.log('ENCRYPTION: AES key encrypted with RSA');
+      
+      // Sign the original message with our private key
+      console.log('ENCRYPTION: Signing message...');
+      const myPrivateKey = await this._getMyPrivateKey();
+      const signature = await CryptoService.signWithRSA(message, myPrivateKey);
+      console.log('ENCRYPTION: Message signed');
+
+      const encryptedData = {
+        content: encryptedMessage.encryptedData,
+        encrypted_aes_key: encryptedAESKey,
+        iv: encryptedMessage.iv,
+        signature: signature,
         is_encrypted: true,
         sender_id: this.currentUserId
       };
-      // This code is now replaced by simple simulation above
+
+      console.log('ENCRYPTION: Message encryption completed successfully!');
+      this.lastError = null;
+      return encryptedData;
+      // Real encryption code above
 
     } catch (error) {
       console.error('🔐 [ENCRYPTION] ❌ Message encryption failed:', error);
@@ -140,17 +166,47 @@ class EncryptionService {
         return encryptedData.content;
       }
 
-      console.log('DECRYPTION: Using simple decryption simulation');
-      
-      // Simple decryption (reverse of base64 encoding)
-      try {
-        const decryptedMessage = atob(encryptedData.content);
-        console.log('DECRYPTION: Message decrypted successfully');
-        return decryptedMessage;
-      } catch (error) {
-        console.log('DECRYPTION: Failed to decode, returning as-is');
-        return encryptedData.content;
+      if (!this.isEncryptionAvailable()) {
+        console.error('DECRYPTION: Encryption not available for decryption');
+        throw new Error('Encryption not available for decryption');
       }
+
+      console.log('DECRYPTION: Starting real message decryption');
+
+      // Decrypt AES key with our private key
+      console.log('DECRYPTION: Decrypting AES key with RSA private key...');
+      const myPrivateKey = await this._getMyPrivateKey();
+      const aesKey = await CryptoService.decryptWithRSA(
+        encryptedData.encrypted_aes_key, 
+        myPrivateKey
+      );
+      console.log('DECRYPTION: AES key decrypted successfully');
+      
+      // Decrypt message content with AES key
+      console.log('DECRYPTION: Decrypting message content with AES...');
+      const decryptedMessage = await CryptoService.decryptWithAES(
+        encryptedData.content,
+        encryptedData.iv,
+        aesKey
+      );
+      console.log('DECRYPTION: Message content decrypted successfully');
+
+      // Verify signature if available
+      if (encryptedData.signature && senderUserId) {
+        console.log('DECRYPTION: Verifying message signature...');
+        const signatureValid = await this._verifyMessageSignature(decryptedMessage, encryptedData.signature, senderUserId);
+        if (!signatureValid) {
+          console.error('DECRYPTION: Signature verification failed');
+          const sigError = new Error('Message signature verification failed');
+          sigError.type = EncryptionErrorTypes.SIGNATURE_VERIFICATION_FAILED;
+          throw sigError;
+        }
+        console.log('DECRYPTION: Message signature verified - sender authentic');
+      }
+
+      console.log('DECRYPTION: Message decryption completed successfully!');
+      this.lastError = null;
+      return decryptedMessage;
 
     } catch (error) {
       console.error('🔓 [DECRYPTION] ❌ Message decryption failed:', error);
@@ -217,7 +273,8 @@ class EncryptionService {
   isEncryptionAvailable() {
     return this.isInitialized && 
            this.currentUserId && 
-           this.currentToken;
+           this.currentToken &&
+           keyExchangeService.getMyPrivateKey() !== null;
   }
 
   /**
@@ -318,10 +375,50 @@ class EncryptionService {
     try {
       this.currentUserId = userId;
       this.currentToken = token;
+
+      // Try to load existing private key from storage
+      console.log('INIT: Checking for existing private key...');
+      let privateKey = await keyStorageService.getPrivateKey(userId);
+      let publicKey = null;
+
+      if (privateKey) {
+        console.log('INIT: Found existing private key, validating...');
+        const isValid = await keyStorageService.validateStoredKey(userId);
+        if (!isValid) {
+          console.warn('INIT: Stored key is invalid, generating new keys');
+          privateKey = null;
+        } else {
+          console.log('INIT: Existing private key is valid');
+        }
+      } else {
+        console.log('INIT: No existing private key found');
+      }
+
+      if (!privateKey) {
+        console.log('INIT: Generating new RSA-2048 key pair...');
+        const keyPair = await CryptoService.generateRSAKeyPair();
+        privateKey = keyPair.privateKey;
+        publicKey = keyPair.publicKey;
+        console.log('INIT: RSA key pair generated successfully');
+        
+        // Store private key securely
+        console.log('INIT: Storing private key securely...');
+        await keyStorageService.storePrivateKey(userId, privateKey);
+        console.log('INIT: Private key stored securely');
+        
+        this.keyGenerationTime = new Date();
+      }
+
+      // Initialize key exchange service
+      console.log('INIT: Initializing key exchange service...');
+      await keyExchangeService.initializeKeys(userId, token);
+      console.log('INIT: Key exchange service initialized');
+
       this.isInitialized = true;
       this.lastError = null;
       
       console.log('INIT: EncryptionService initialized successfully!');
+      console.log('INIT: End-to-end encryption is now ACTIVE');
       return true;
 
     } catch (error) {
