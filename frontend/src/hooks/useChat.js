@@ -243,21 +243,31 @@ export const useChat = (userId, token) => {
 
     // Start a chat with a specific user
     const startChatWithUser = async (targetUserId) => {
-        if (!targetUserId || !isConnected) {
-            console.error('Cannot start chat: missing targetUserId or not connected');
+        if (!targetUserId) {
+            console.error('Cannot start chat: missing targetUserId');
             return null;
+        }
+
+        if (!isConnected) {
+            console.warn('WebSocket not connected, attempting to create room anyway');
+            // Don't return null, try to create room anyway
         }
 
         console.log('useChat: Starting chat with targetUserId:', targetUserId, 'currentUserId:', userId);
 
-        // Use the WebSocket service to start a direct message
-        const roomId = websocketService.startDirectMessage(targetUserId);
+        try {
+            // Use the WebSocket service to start a direct message
+            const roomId = websocketService.startDirectMessage(targetUserId);
 
-        if (roomId) {
-            console.log('useChat: Direct message room created:', roomId);
-            return roomId;
-        } else {
-            console.error('useChat: Failed to create direct message room');
+            if (roomId) {
+                console.log('useChat: Direct message room created:', roomId);
+                return roomId;
+            } else {
+                console.error('useChat: Failed to create direct message room');
+                return null;
+            }
+        } catch (error) {
+            console.error('useChat: Error starting chat:', error);
             return null;
         }
     };
