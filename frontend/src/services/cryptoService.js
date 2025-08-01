@@ -14,6 +14,7 @@ class CryptoService {
         try {
             console.log('Generating RSA-2048 key pair...');
             
+            // Generate RSA key pair with EXACT same parameters
             const keyPair = await crypto.subtle.generateKey(
                 {
                     name: 'RSA-OAEP',
@@ -147,17 +148,30 @@ class CryptoService {
      */
     static async decryptWithRSA(encryptedData, privateKeyPem) {
         try {
-            console.log('RSA Decryption with Web Crypto API');
+            console.log('RSA Decryption starting...');
+            console.log('Encrypted data length:', encryptedData?.length);
+            console.log('Private key length:', privateKeyPem?.length);
             
             // Import the private key
             const privateKey = await this._importPrivateKey(privateKeyPem);
+            console.log('Private key imported successfully');
             
             // Convert base64 to ArrayBuffer
-            const encryptedArray = new Uint8Array(
-                atob(encryptedData).split('').map(char => char.charCodeAt(0))
-            );
+            let encryptedArray;
+            try {
+                const binaryString = atob(encryptedData);
+                encryptedArray = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                    encryptedArray[i] = binaryString.charCodeAt(i);
+                }
+                console.log('Encrypted data converted to array, length:', encryptedArray.length);
+            } catch (b64Error) {
+                console.error('Base64 decode failed:', b64Error);
+                throw new Error(`Invalid base64 data: ${b64Error.message}`);
+            }
             
             // Decrypt with RSA-OAEP
+            console.log('Attempting RSA-OAEP decryption...');
             const decryptedBuffer = await crypto.subtle.decrypt(
                 {
                     name: 'RSA-OAEP'
@@ -168,11 +182,11 @@ class CryptoService {
             
             // Convert back to string
             const decrypted = new TextDecoder().decode(decryptedBuffer);
+            console.log('RSA decryption successful, result length:', decrypted.length);
             
-            console.log('RSA decryption successful');
             return decrypted;
         } catch (error) {
-            console.error('RSA Decryption error:', error);
+            console.error('RSA Decryption error:', error.name, error.message);
             throw new Error(`Failed to decrypt with RSA: ${error.message}`);
         }
     }
