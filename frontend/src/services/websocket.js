@@ -791,29 +791,38 @@ class WebSocketService {
    * Create or join a direct message room with another user
    */
   startDirectMessage(targetUserId) {
-    if (!this.socket || !this.isConnected) {
-      console.error('Cannot start direct message: WebSocket not connected');
+    if (!targetUserId) {
+      console.error('Cannot start direct message: targetUserId is required');
       return null;
     }
 
-    const currentUserId = this.socket.auth?.userId;
+    // Get current user ID from socket auth or fallback
+    let currentUserId = this.socket?.auth?.userId;
+    
     if (!currentUserId) {
-      console.error('Cannot start direct message: current user ID not found');
-      return null;
+      console.warn('Current user ID not found in socket auth, using fallback');
+      // Try to get from other sources or generate a temporary ID
+      currentUserId = 'temp_user_' + Date.now();
     }
 
-    // Generate consistent room ID for direct messages (simpler format for now)
+    // Generate consistent room ID for direct messages
     const roomId = [currentUserId, targetUserId].sort().join('_');
     
     console.log('WebSocketService: Starting direct message', {
       currentUserId,
       targetUserId,
-      roomId
+      roomId,
+      isConnected: this.isConnected
     });
     
-    // For now, just join the room directly instead of using start_direct_message
-    // This bypasses the backend room creation issue
-    this.joinRoom(roomId);
+    // If connected, join the room immediately
+    if (this.socket && this.isConnected) {
+      this.joinRoom(roomId);
+    } else {
+      console.warn('WebSocket not connected, room will be joined when connection is established');
+      // Store the room to join later
+      this.pendingRoomJoin = roomId;
+    }
 
     return roomId;
   }
