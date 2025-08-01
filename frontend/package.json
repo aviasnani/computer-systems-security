@@ -1,0 +1,33 @@
+{
+  "name": "cs-demo",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "crypto-js": "^4.2.0",
+    "firebase": "^11.8.1",
+    "jsencrypt": "^3.3.2",
+    "lucide-react": "^0.528.0",
+    "next": "15.3.3",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "socket.io-client": "^4.8.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "eslint": "9.32.0",
+    "eslint-config-next": "15.4.4",
+    "tailwindcss": "^4",
+    "vitest": "^1.6.0",
+    "@vitest/ui": "^1.6.0",
+    "jsdom": "^24.0.0"
+  }
+}
