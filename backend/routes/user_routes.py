@@ -20,12 +20,12 @@ def get_public_key(user_id):
         if not user:
             return jsonify({'status': 'error', 'message': 'User not found'}), 404
 
-        # If user doesn't have a public key, generate a mock one for development
+        # If user doesn't have a public key, return 404
         if not user.public_key:
-            mock_public_key = f"-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA{user_id:064d}\n-----END PUBLIC KEY-----"
-            user.public_key = mock_public_key
-            user.key_version = 1
-            db.session.commit()
+            return jsonify({
+                'status': 'error', 
+                'message': 'No public key available'
+            }), 404
 
         return jsonify({
             'status': 'success',
