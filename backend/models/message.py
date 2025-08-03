@@ -15,6 +15,7 @@ class Message(db.Model):
     status = db.Column(db.String(20), nullable=False, default='sent')  # sent, delivered, read
     delivered_at = db.Column(db.DateTime(timezone=True), nullable=True)
     timestamp = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    original_content = db.Column(db.Text, nullable=True)  # NEW: Store original message for sender
 
     def validate_encrypted_fields(self):
         """Validate that encrypted messages have required fields"""
@@ -52,5 +53,6 @@ class Message(db.Model):
             'message_type': self.message_type,
             'status': self.status,
             'delivered_at': self.delivered_at.isoformat() if self.delivered_at else None,
-            'timestamp': self.timestamp.isoformat() if self.timestamp else None
+            'timestamp': self.timestamp.isoformat() if self.timestamp else None,
+            'original_content': self.original_content  # NEW: Include original content
         }

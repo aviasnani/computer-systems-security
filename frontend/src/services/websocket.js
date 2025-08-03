@@ -190,7 +190,8 @@ class WebSocketService {
         encrypted_aes_key: encryptionData.encrypted_aes_key || null,
         iv: encryptionData.iv || null,
         signature: encryptionData.signature || null,
-        is_encrypted: encryptionData.is_encrypted || false
+        is_encrypted: encryptionData.is_encrypted || false,
+        original_content: encryptionData.original_content || null
       };
 
       if (this.socket && this.isConnected) {
