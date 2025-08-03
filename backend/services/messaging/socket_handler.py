@@ -232,6 +232,7 @@ class SocketHandler:
                 iv = data.get('iv')
                 signature = data.get('signature')
                 is_encrypted = data.get('is_encrypted', False)
+                original_content = data.get('original_content')  # NEW: Store original message
                 
                 if not sender_id or not room_id or not content:
                     emit('message_error', {
@@ -257,7 +258,8 @@ class SocketHandler:
                     iv=iv,
                     signature=signature,
                     is_encrypted=is_encrypted,
-                    message_type=message_type
+                    message_type=message_type,
+                    original_content=original_content  # NEW: Store original content
                 )
                 
                 # Validate encrypted message fields

@@ -21,6 +21,8 @@ export const useChat = (userId, token) => {
     // Handle incoming messages
     const handleMessage = useCallback(async (messageData) => {
         console.log('handleMessage: Processing message:', messageData);
+        console.log('handleMessage: messageData.sender_id:', messageData.sender_id, 'type:', typeof messageData.sender_id);
+        console.log('handleMessage: userId:', userId, 'type:', typeof userId);
 
         let messageText;
         let isEncrypted = false;
@@ -28,16 +30,20 @@ export const useChat = (userId, token) => {
         let signatureValid = true;
         let decryptionErrorType = null;
 
-        // Check if this is our own message (sender)
-        const isOwnMessage = messageData.sender_id === userId;
+        // Check if this is our own message (sender) - ensure type matching
+        const isOwnMessage = messageData.sender_id === userId || messageData.sender_id === String(userId) || String(messageData.sender_id) === String(userId);
+        console.log('handleMessage: isOwnMessage:', isOwnMessage);
 
         try {
             if (messageData.is_encrypted) {
                 isEncrypted = true;
                 
                 if (isOwnMessage) {
-                    console.log('handleMessage: This is our own encrypted message - skipping decryption');
-                    messageText = '[Message sent encrypted]';
+                    console.log('handleMessage: This is our own encrypted message');
+                    console.log('handleMessage: messageData.original_content:', messageData.original_content);
+                    console.log('handleMessage: messageData.content:', messageData.content);
+                    messageText = messageData.original_content || messageData.content;
+                    console.log('handleMessage: Using messageText:', messageText);
                     signatureValid = true;
                     encryptionError = null;
                 } else {
@@ -263,14 +269,19 @@ export const useChat = (userId, token) => {
                 encrypted_aes_key: messageData.encrypted_aes_key,
                 iv: messageData.iv,
                 signature: messageData.signature,
-                is_encrypted: messageData.is_encrypted
+                is_encrypted: messageData.is_encrypted,
+                original_content: messageContent.trim()
             });
+
+            // Message will be added when backend sends it back with original_content
 
             setPendingMessagesCount(websocketService.getPendingMessagesCount());
             return result;
         } catch (error) {
             console.error('Failed to send message:', error);
             const result = websocketService.sendMessage(roomId, messageContent.trim());
+            
+            // Message will be added when backend sends it back
             setPendingMessagesCount(websocketService.getPendingMessagesCount());
             return result;
         }
