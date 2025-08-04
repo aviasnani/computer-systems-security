@@ -30,11 +30,28 @@ def require_auth(f):
 
 @auth_bp.route('/register', methods=['POST'])
 def register():
-    """Register a new user with email and password"""
+    """Register with Firebase token (supports GitHub OAuth)"""
     try:
         data = request.get_json()
         
-        # Validate required fields
+        # Check if using Firebase token
+        firebase_token = data.get('firebase_token')
+        if firebase_token:
+            # Firebase registration (including GitHub OAuth)
+            firebase_user = firebase_auth.verify_firebase_token(firebase_token)
+            user = firebase_auth.get_or_create_user(firebase_user)
+            
+            # Create session
+            session['user_id'] = user.id
+            session['authenticated'] = True
+            
+            return jsonify({
+                'status': 'success',
+                'message': 'User registered successfully',
+                'data': user.to_dict()
+            }), 201
+        
+        # Original email/password registration (keep for backward compatibility)
         required_fields = ['email', 'password', 'username', 'display_name']
         for field in required_fields:
             if not data.get(field):
@@ -71,10 +88,8 @@ def register():
             created_at=datetime.now(timezone.utc)
         )
         
-        print(f"[DEBUG] Creating user: {email}, {username}")
         db.session.add(new_user)
         db.session.commit()
-        print(f"[DEBUG] User created with ID: {new_user.id}")
         
         # Create session
         session['user_id'] = new_user.id
@@ -83,17 +98,11 @@ def register():
         return jsonify({
             'status': 'success',
             'message': 'User registered successfully',
-            'data': {
-                'user_id': new_user.id,
-                'email': new_user.email,
-                'username': new_user.username,
-                'display_name': new_user.display_name
-            }
+            'data': new_user.to_dict()
         }), 201
         
     except Exception as e:
         db.session.rollback()
-        print(f"Registration error: {str(e)}")
         return jsonify({
             'status': 'error',
             'message': f'Registration failed: {str(e)}'
@@ -101,10 +110,28 @@ def register():
 
 @auth_bp.route('/login', methods=['POST'])
 def login():
-    """Login user with email and password"""
+    """Login with Firebase token or email/password"""
     try:
         data = request.get_json()
         
+        # Check if using Firebase token
+        firebase_token = data.get('firebase_token')
+        if firebase_token:
+            # Firebase login (including GitHub OAuth)
+            firebase_user = firebase_auth.verify_firebase_token(firebase_token)
+            user = firebase_auth.get_or_create_user(firebase_user)
+            
+            # Create session
+            session['user_id'] = user.id
+            session['authenticated'] = True
+            
+            return jsonify({
+                'status': 'success',
+                'message': 'Login successful',
+                'data': user.to_dict()
+            }), 200
+        
+        # Original email/password login
         if not data.get('email') or not data.get('password'):
             return jsonify({
                 'status': 'error',
@@ -132,16 +159,10 @@ def login():
         return jsonify({
             'status': 'success',
             'message': 'Login successful',
-            'data': {
-                'user_id': user.id,
-                'email': user.email,
-                'username': user.username,
-                'display_name': user.display_name
-            }
+            'data': user.to_dict()
         }), 200
         
     except Exception as e:
-        print(f"Login error: {str(e)}")
         return jsonify({
             'status': 'error',
             'message': 'Login failed'
