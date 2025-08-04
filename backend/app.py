@@ -1,3 +1,5 @@
+from dotenv import load_dotenv
+load_dotenv()
 from flask import Flask, jsonify
 from flask_socketio import SocketIO
 from flask_cors import CORS
@@ -6,6 +8,7 @@ from extensions import db
 from routes.user_routes import user_bp
 from routes.auth_routes import auth_bp
 from services.messaging.socket_handler import SocketHandler
+
 
 app = Flask(__name__)
 app.config.from_object(Config)
