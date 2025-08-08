@@ -41,24 +41,37 @@ function ChatInterface({ roomId }) {
         const userIds = roomId.split('_');
         const otherUserId = userIds.find(id => id !== currentUser?.uid);
         if (otherUserId) {
-          // Create a mock user object for now
-          const mockUser = {
-            id: parseInt(otherUserId),
-            username: `user${otherUserId}`,
-            name: `User ${otherUserId}`,
-            display_name: `User ${otherUserId}`,
-            email: `user${otherUserId}@example.com`
-          };
-          setSelectedUser(mockUser);
-          
-          // Add to active chats
-          setActiveChats(prev => {
-            const exists = prev.find(chat => chat.roomId === roomId);
-            if (!exists) {
-              return [...prev, { roomId, user: mockUser, lastActivity: new Date() }];
+          // Fetch real user data instead of creating mock user
+          const fetchUserData = async () => {
+            try {
+              const response = await fetch(`http://localhost:5000/api/users/${otherUserId}`, {
+                credentials: 'include'
+              });
+              
+              if (response.ok) {
+                const userData = await response.json();
+                const realUser = userData.data;
+                setSelectedUser(realUser);
+                
+                // Add to active chats
+                setActiveChats(prev => {
+                  const exists = prev.find(chat => chat.roomId === roomId);
+                  if (!exists) {
+                    return [...prev, { roomId, user: realUser, lastActivity: new Date() }];
+                  }
+                  return prev;
+                });
+              } else {
+                console.error('Failed to fetch user data for', otherUserId);
+              }
+            } catch (error) {
+              console.error('Error fetching user data:', error);
             }
-            return prev;
-          });
+          };
+          
+          fetchUserData();
+          return; // Skip the mock user creation below
+          // This code is now handled above with real user fetch
         }
       }
     }
@@ -383,7 +396,7 @@ function ChatInterface({ roomId }) {
             currentRoom={currentRoom}
             selectedRoomId={selectedRoomId}
             selectedUser={selectedUser}
-            sendMessage={(message, encryptedData) => sendWebSocketMessage(selectedRoomId, message, encryptedData)}
+            sendMessage={(roomId, message, encryptedData) => sendWebSocketMessage(roomId, message, encryptedData)}
             connectionError={connectionError}
             lastError={lastError}
             pendingMessagesCount={pendingMessagesCount}

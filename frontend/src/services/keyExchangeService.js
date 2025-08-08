@@ -1,5 +1,6 @@
 /**
  * KeyExchangeService - Handles RSA key exchange and management with enhanced validation and caching
+ * All operations now use the actual GitHub username (lowercase) instead of numeric DB IDs.
  */
 
 class KeyExchangeService {
@@ -13,280 +14,159 @@ class KeyExchangeService {
     this.maxRetries = 3;
     this.BACKEND_URL = "http://localhost:5000";
   }
+
   /**
-   * Initialize user's key pair and upload public key to server with validation and storage
+   * Normalize GitHub username to lowercase
    */
-  async initializeKeys(userId, token) {
-    console.log('🔄 [KEY_INIT] Starting key initialization for user:', userId);
+  _normalizeUsername(username) {
+    if (!username || typeof username !== 'string') {
+      throw new Error("GitHub username is required");
+    }
+    return username.trim().toLowerCase();
+  }
+
+  /**
+   * Initialize keys and upload to GitHub
+   */
+  async initializeKeys(githubUsername, githubToken) {
+    githubUsername = this._normalizeUsername(githubUsername);
+    console.log(' [KEY_INIT] Starting GitHub-based key initialization for user:', githubUsername);
 
     try {
-      // First try to load existing keys from storage
-      console.log('🔄 [KEY_INIT] 🔍 Checking for existing keys in storage...');
-      const keyStorageService = (await import("./keyStorageService.js")).default;
-      const existingPrivateKey = await keyStorageService.getPrivateKey(userId);
+      const keyStorageService = (await import('./keyStorageService.js')).default;
 
+      // Try existing private key
+      const existingPrivateKey = await keyStorageService.getPrivateKey(githubUsername);
       if (existingPrivateKey && await this.validateKeyPair(null, existingPrivateKey)) {
-        console.log('🔄 [KEY_INIT] ✅ Found valid existing private key');
-        // Use existing valid keys
+        console.log(' [KEY_INIT]  Using existing private key');
         this.myPrivateKey = existingPrivateKey;
-
-        // Try to get the corresponding public key from server
-        console.log('🔄 [KEY_INIT] 🌐 Fetching corresponding public key from server...');
-        try {
-          const serverKeyData = await this._fetchUserKeyFromServer(userId, token);
-          if (serverKeyData && await this._validateKeyPairMatch(serverKeyData.public_key, existingPrivateKey)) {
-            this.myPublicKey = serverKeyData.public_key;
-            this.myKeyVersion = serverKeyData.key_version || 1;
-            console.log('🔄 [KEY_INIT] ✅ Existing keys loaded and validated successfully');
-            console.log('🔄 [KEY_INIT] 🔑 Public key retrieved from server');
-            return true;
-          }
-        } catch (error) {
-          console.warn('🔄 [KEY_INIT] ⚠️ Failed to validate existing keys with server, generating new ones:', error);
-        }
-      } else {
-        console.log('🔄 [KEY_INIT] ℹ️ No valid existing keys found');
+        return true;
       }
 
-      // Generate new RSA key pair with retry logic
-      console.log('🔄 [KEY_INIT] 🔑 Generating new RSA-2048 key pair...');
-      let keyPair;
-      let retryCount = 0;
-
-      while (retryCount < this.maxRetries) {
-        try {
-          const CryptoService = (await import("./cryptoService.js")).default;
-          keyPair = await CryptoService.generateRSAKeyPair();
-          console.log('🔄 [KEY_INIT] ✅ RSA key pair generated, validating...');
-
-          // Validate the generated key pair
-          if (await this.validateKeyPair(keyPair.publicKey, keyPair.privateKey)) {
-            console.log('🔄 [KEY_INIT] ✅ Key pair validation successful');
-            break;
-          } else {
-            throw new Error("Generated key pair validation failed");
-          }
-        } catch (error) {
-          retryCount++;
-          if (retryCount >= this.maxRetries) {
-            throw new Error(`Failed to generate valid key pair after ${this.maxRetries} attempts: ${error.message}`);
-          }
-          console.warn(`🔄 [KEY_INIT] ⚠️ Key generation attempt ${retryCount} failed, retrying...`);
-          await this._delay(1000 * retryCount); // Exponential backoff
-        }
-      }
+      // Generate new RSA key pair
+      console.log(' [KEY_INIT]  Generating new RSA key pair...');
+      const CryptoService = (await import('./cryptoService.js')).default;
+      const keyPair = await CryptoService.generateRSAKeyPair();
 
       this.myPrivateKey = keyPair.privateKey;
       this.myPublicKey = keyPair.publicKey;
-      this.myKeyVersion = Date.now(); // Use timestamp as version
 
-      // Store private key securely
-      console.log('🔄 [KEY_INIT] 💾 Storing private key securely in browser...');
-      await keyStorageService.storePrivateKey(userId, this.myPrivateKey);
-      console.log('🔄 [KEY_INIT] ✅ Private key stored securely');
+      // Store private key locally under GitHub username
+      await keyStorageService.storePrivateKey(githubUsername, this.myPrivateKey);
+      console.log(' [KEY_INIT]  Private key stored locally');
 
-      // Upload public key to server with version
-      console.log('KEY_INIT: Uploading public key to server...');
-      console.log('KEY_INIT: Public key preview:', this.myPublicKey?.substring(0, 100) + '...');
-      
-      const response = await fetch(
-        `${this.BACKEND_URL}/api/users/${userId}/public-key`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          credentials: 'include',
-          body: JSON.stringify({
-            public_key: this.myPublicKey,
-            key_version: this.myKeyVersion,
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('KEY_INIT: Failed to upload public key:', response.status, errorText);
-        throw new Error(`Failed to upload public key: ${response.status} - ${errorText}`);
+      // Upload public key to GitHub
+      if (githubToken) {
+        const githubKeyService = (await import('./gitHubService.js')).default;
+        await githubKeyService.uploadPublicKey(keyPair.publicKey, githubToken);
+        console.log(' [KEY_INIT]  Public key uploaded to GitHub');
       }
-      
-      const uploadResult = await response.json();
-      console.log('KEY_INIT: Public key uploaded successfully:', uploadResult.status);
 
-      console.log('🔄 [KEY_INIT] ✅ Public key uploaded to server successfully');
-      console.log('🔄 [KEY_INIT] 🎉 Keys initialized, validated, and uploaded successfully!');
+      console.log('[KEY_INIT]  GitHub-based key initialization completed!');
       return true;
+
     } catch (error) {
-      console.error('🔄 [KEY_INIT] ❌ Failed to initialize keys:', error);
+      console.error(' [KEY_INIT]  Failed to initialize keys:', error);
       throw error;
     }
   }
 
   /**
-   * Get public key for a specific user - ALWAYS fetch fresh from server (no caching)
+   * Get public key for a specific GitHub user from GitHub
    */
-  async getUserPublicKey(userId, token) {
-    console.log('📥 [KEY_FETCH] Fetching FRESH public key for user:', userId);
+  async getUserPublicKey(githubUsername) {
+    githubUsername = this._normalizeUsername(githubUsername);
+    console.log(' [KEY_FETCH] Fetching public key from GitHub for:', githubUsername);
 
     try {
-      // ALWAYS fetch fresh from server to avoid stale key issues
-      console.log('📥 [KEY_FETCH] 🌐 Fetching fresh public key from server (bypassing cache)...');
+      const githubKeyService = (await import('./gitHubService.js')).default;
 
-      // Fetch from server with retry logic
-      let retryCount = 0;
-      let keyData;
-
-      while (retryCount < this.maxRetries) {
-        try {
-          keyData = await this._fetchUserKeyFromServer(userId, token);
-          console.log('📥 [KEY_FETCH] ✅ Fresh public key received from server');
-          break;
-        } catch (error) {
-          retryCount++;
-          if (retryCount >= this.maxRetries) {
-            throw error;
-          }
-          console.warn(`📥 [KEY_FETCH] ⚠️ Fetch attempt ${retryCount} failed for user ${userId}, retrying...`);
-          await this._delay(1000 * retryCount);
-        }
+      // Fetch SSH keys from GitHub
+      const sshKeys = await githubKeyService.fetchUserPublicKeys(githubUsername);
+      if (!sshKeys || sshKeys.length === 0) {
+        throw new Error(`No public keys found for GitHub user: ${githubUsername}`);
       }
 
-      if (!keyData || !keyData.public_key) {
-        console.error('📥 [KEY_FETCH] ❌ Invalid key data received from server');
-        throw new Error("Invalid key data received from server");
-      }
+      // Convert first SSH key to PEM format
+      const pemKey = githubKeyService.convertSSHtoPEM(sshKeys[0]);
 
-      // Validate the public key format
-      console.log('📥 [KEY_FETCH] 🔍 Validating public key format...');
-      if (!this._isValidPublicKey(keyData.public_key)) {
-        console.error('📥 [KEY_FETCH] ❌ Invalid public key format received from server');
-        throw new Error("Invalid public key format received from server");
-      }
-      console.log('📥 [KEY_FETCH] ✅ Public key format validation passed');
-      console.log('📥 [KEY_FETCH] 🔑 Key version:', keyData.key_version || 1);
+      console.log(' [KEY_FETCH]  Public key fetched from GitHub successfully');
+      return pemKey;
 
-      // Still update cache for reference but don't rely on it
-      this.userKeys.set(userId, {
-        publicKey: keyData.public_key,
-        keyVersion: keyData.key_version || 1,
-        timestamp: Date.now(),
-        userId: userId
-      });
-
-      this.keyVersions.set(userId, keyData.key_version || 1);
-      console.log('📥 [KEY_FETCH] ✅ Fresh public key obtained successfully');
-
-      return keyData.public_key;
     } catch (error) {
-      console.error('📥 [KEY_FETCH] ❌ Failed to get user public key:', error);
+      console.error('[KEY_FETCH] Failed to get GitHub public key:', error);
       throw error;
     }
   }
 
   /**
-   * Get all public keys for users in a room (simplified for general room)
+   * Get all public keys for GitHub users in a room
    */
-  async getRoomUserKeys(roomUsers, token) {
+  async getRoomUserKeys(githubUsernames) {
     const keys = {};
-
-    for (const userId of roomUsers) {
+    for (const username of githubUsernames) {
       try {
-        keys[userId] = await this.getUserPublicKey(userId, token);
+        keys[username] = await this.getUserPublicKey(username);
       } catch (error) {
-        console.warn(`Failed to get key for user ${userId}:`, error);
+        console.warn(`Failed to get key for GitHub user ${username}:`, error);
       }
     }
-
     return keys;
   }
 
-  /**
-   * Get my private key
-   */
   getMyPrivateKey() {
     return this.myPrivateKey;
   }
 
-  /**
-   * Get my public key
-   */
   getMyPublicKey() {
     return this.myPublicKey;
   }
-  
-  /**
-   * Get my key version
-   */
+
   getMyKeyVersion() {
     return this.myKeyVersion || 1;
   }
 
   /**
-   * Refresh user's public key from server and update cache
+   * Refresh a user's public key from GitHub
    */
-  async refreshUserKey(userId, token) {
+  async refreshUserKey(githubUsername) {
+    githubUsername = this._normalizeUsername(githubUsername);
     try {
-      // Remove from cache to force fresh fetch
-      this.userKeys.delete(userId);
-      this.keyVersions.delete(userId);
-
-      // Fetch fresh key from server
-      const publicKey = await this.getUserPublicKey(userId, token);
-
-      console.log(`Refreshed public key for user ${userId}`);
+      this.userKeys.delete(githubUsername);
+      this.keyVersions.delete(githubUsername);
+      const publicKey = await this.getUserPublicKey(githubUsername);
+      console.log(`Refreshed public key for GitHub user ${githubUsername}`);
       return publicKey;
     } catch (error) {
-      console.error(`Failed to refresh key for user ${userId}:`, error);
+      console.error(`Failed to refresh key for GitHub user ${githubUsername}:`, error);
       throw error;
     }
   }
 
   /**
-   * Validate RSA key pair functionality
+   * Validate RSA key pair
    */
   async validateKeyPair(publicKey, privateKey) {
     try {
-      if (!privateKey) {
-        return false;
-      }
+      if (!privateKey) return false;
+      if (!this._isValidPrivateKey(privateKey)) return false;
+      if (publicKey && !this._isValidPublicKey(publicKey)) return false;
 
-      // Basic format validation
-      if (!this._isValidPrivateKey(privateKey)) {
-        return false;
-      }
-
-      if (publicKey && !this._isValidPublicKey(publicKey)) {
-        return false;
-      }
-
-      // Functional validation - test encryption/decryption
       const CryptoService = (await import("./cryptoService.js")).default;
       const testData = "key_validation_test_" + Date.now();
 
       try {
-        // Test signing with private key
         const signature = await CryptoService.signWithRSA(testData, privateKey);
-        if (!signature) {
-          return false;
-        }
+        if (!signature) return false;
 
-        // If we have the public key, test the full cycle
         if (publicKey) {
-          // Test signature verification
           const isValidSignature = await CryptoService.verifyRSASignature(testData, signature, publicKey);
-          if (!isValidSignature) {
-            return false;
-          }
+          if (!isValidSignature) return false;
 
-          // Test encryption/decryption cycle
           const encrypted = await CryptoService.encryptWithRSA(testData, publicKey);
           const decrypted = await CryptoService.decryptWithRSA(encrypted, privateKey);
-
-          if (decrypted !== testData) {
-            return false;
-          }
+          if (decrypted !== testData) return false;
         }
-
         return true;
       } catch (error) {
         console.warn("Key pair functional validation failed:", error);
@@ -299,88 +179,42 @@ class KeyExchangeService {
   }
 
   /**
-   * Check if user's key needs rotation based on version or corruption
+   * Rotate keys for the current GitHub user
    */
-  async checkKeyRotationNeeded(userId, token) {
+  async rotateMyKeys(githubUsername, githubToken) {
+    githubUsername = this._normalizeUsername(githubUsername);
     try {
-      // Get current server key version
-      const serverKeyData = await this._fetchUserKeyFromServer(userId, token);
-      const serverVersion = serverKeyData?.key_version || 1;
+      console.log(`Starting key rotation for user ${githubUsername}`);
 
-      // Get cached version
-      const cachedVersion = this.keyVersions.get(userId) || 1;
-
-      // Check if server has newer version
-      if (serverVersion > cachedVersion) {
-        console.log(`Key rotation needed for user ${userId}: server version ${serverVersion} > cached version ${cachedVersion}`);
-        return true;
-      }
-
-      // Check if cached key is corrupted
-      const cachedData = this.userKeys.get(userId);
-      if (cachedData && !this._isValidPublicKey(cachedData.publicKey)) {
-        console.log(`Key rotation needed for user ${userId}: cached key is corrupted`);
-        return true;
-      }
-
-      return false;
-    } catch (error) {
-      console.warn(`Failed to check key rotation for user ${userId}:`, error);
-      return true; // Assume rotation needed if we can't check
-    }
-  }
-
-  /**
-   * Rotate keys for current user (generate new key pair and upload)
-   */
-  async rotateMyKeys(userId, token) {
-    try {
-      console.log(`Starting key rotation for user ${userId}`);
-
-      // Clear existing keys
       this.myPrivateKey = null;
       this.myPublicKey = null;
 
-      // Clear from storage
-      const keyStorageService = (await import("./keyStorageService.js")).default;
-      await keyStorageService.clearPrivateKey(userId);
+      const keyStorageService = (await import('./keyStorageService.js')).default;
+      await keyStorageService.clearPrivateKey(githubUsername);
 
-      // Generate new keys (this will automatically store and upload them)
-      await this.initializeKeys(userId, token);
+      await this.initializeKeys(githubUsername, githubToken);
 
-      console.log(`Key rotation completed for user ${userId}`);
+      console.log(`Key rotation completed for user ${githubUsername}`);
       return true;
     } catch (error) {
-      console.error(`Failed to rotate keys for user ${userId}:`, error);
+      console.error(`Failed to rotate keys for user ${githubUsername}:`, error);
       throw error;
     }
   }
 
-  /**
-   * Clear all cached keys and versions
-   */
   clearCache() {
     this.userKeys.clear();
     this.keyVersions.clear();
   }
 
-  /**
-   * Clear all keys including stored private keys
-   */
   async clearAllKeys() {
     try {
-      // Clear memory cache
       this.clearCache();
-
-      // Clear stored keys
       const keyStorageService = (await import("./keyStorageService.js")).default;
       await keyStorageService.clearAllKeys();
-
-      // Clear instance variables
       this.myPrivateKey = null;
       this.myPublicKey = null;
       this.myKeyVersion = 1;
-
       console.log("All keys cleared successfully");
     } catch (error) {
       console.error("Failed to clear all keys:", error);
@@ -388,91 +222,17 @@ class KeyExchangeService {
     }
   }
 
-  // Private helper methods
-
-  /**
-   * Fetch user key data from server
-   */
-  async _fetchUserKeyFromServer(userId, token) {
-    const response = await fetch(
-      `${this.BACKEND_URL}/api/users/${userId}/public-key`,
-      {
-        credentials: 'include',
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch user public key: ${response.status}`);
-    }
-
-    const data = await response.json();
-    return data.data;
-  }
-
-  /**
-   * Check if cached data is still valid based on timestamp
-   */
-  _isCacheValid(timestamp) {
-    return Date.now() - timestamp < this.cacheExpiry;
-  }
-
-  /**
-   * Validate public key format
-   */
   _isValidPublicKey(publicKey) {
-    if (!publicKey || typeof publicKey !== 'string') {
-      return false;
-    }
+    if (!publicKey || typeof publicKey !== 'string') return false;
     const pemRegex = /^-----BEGIN PUBLIC KEY-----[\s\S]*-----END PUBLIC KEY-----$/;
     return pemRegex.test(publicKey.trim());
   }
 
-  /**
-   * Validate private key format
-   */
   _isValidPrivateKey(privateKey) {
-    if (!privateKey || typeof privateKey !== 'string') {
-      return false;
-    }
-    // Accept both PKCS#1 and PKCS#8 formats
+    if (!privateKey || typeof privateKey !== 'string') return false;
     const pkcs1Regex = /^-----BEGIN RSA PRIVATE KEY-----[\s\S]*-----END RSA PRIVATE KEY-----$/;
     const pkcs8Regex = /^-----BEGIN PRIVATE KEY-----[\s\S]*-----END PRIVATE KEY-----$/;
     return pkcs1Regex.test(privateKey.trim()) || pkcs8Regex.test(privateKey.trim());
-  }
-
-  /**
-   * Validate that public and private keys match
-   */
-  async _validateKeyPairMatch(publicKey, privateKey) {
-    try {
-      console.log('Validating key pair match...');
-      console.log('Public key format check:', publicKey?.includes('-----BEGIN PUBLIC KEY-----'));
-      console.log('Private key format check:', privateKey?.includes('-----BEGIN RSA PRIVATE KEY-----'));
-      
-      const CryptoService = (await import("./cryptoService.js")).default;
-      const testData = "test";
-
-      console.log('Testing encryption with public key...');
-      const encrypted = await CryptoService.encryptWithRSA(testData, publicKey);
-      console.log('Encryption successful, testing decryption...');
-      
-      const decrypted = await CryptoService.decryptWithRSA(encrypted, privateKey);
-      console.log('Decryption result:', decrypted);
-      
-      const isMatch = decrypted === testData;
-      console.log('Key pair validation result:', isMatch);
-      return isMatch;
-    } catch (error) {
-      console.error('Key pair validation failed:', error);
-      return false;
-    }
-  }
-
-  /**
-   * Delay helper for retry logic
-   */
-  _delay(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
   }
 }
 

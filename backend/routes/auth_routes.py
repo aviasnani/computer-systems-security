@@ -163,9 +163,12 @@ def login():
         }), 200
         
     except Exception as e:
+        print(f"Login error: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({
             'status': 'error',
-            'message': 'Login failed'
+            'message': f'Login failed: {str(e)}'
         }), 500
 
 @auth_bp.route('/me', methods=['GET'])

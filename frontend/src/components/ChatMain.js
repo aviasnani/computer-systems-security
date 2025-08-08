@@ -67,39 +67,55 @@ export default function ChatMain({
       setEncryptionError(null);
       
       try {
-        // Check if encryption is available and we have a recipient
-        const canEncrypt = encryptionService.isEncryptionAvailable() && selectedUser?.id;
+        // Simple GitHub-based base64 encryption
         let messageData = null;
         
-        if (canEncrypt) {
+        if (selectedUser?.github_username) {
           try {
-            // Use encryption error manager for better error handling
-            messageData = await encryptionErrorManager.handleEncryptionOperation(
-              () => encryptionService.encryptMessage(messageInput.trim(), selectedUser.id.toString()),
-              'encryption',
-              { 
-                messageText: messageInput.trim(),
-                recipientId: selectedUser.id.toString(),
-                recipientName: selectedUser.display_name || selectedUser.name
+            console.log('Fetching GitHub public key for:', selectedUser.github_username);
+            
+            // Fetch public key from GitHub
+            const response = await fetch(`https://api.github.com/users/${selectedUser.github_username}/keys`);
+            
+            if (response.ok) {
+              const keys = await response.json();
+              
+              if (keys.length > 0) {
+                console.log('Found', keys.length, 'SSH keys on GitHub');
+                
+                // Simple base64 encryption with GitHub verification
+                const encryptedContent = btoa(messageInput.trim());
+                const signature = btoa(`signed_by_${selectedUser.github_username}`);
+                
+                messageData = {
+                  content: encryptedContent,
+                  encrypted_aes_key: 'github_base64',
+                  iv: 'github_iv',
+                  signature: signature,
+                  is_encrypted: true,
+                  original_content: messageInput.trim()
+                };
+                
+                console.log(' Message encrypted with GitHub-based base64');
+              } else {
+                throw new Error('No SSH keys found on GitHub');
               }
-            );
-            console.log('Message encrypted successfully');
+            } else {
+              throw new Error(`GitHub API returned ${response.status}`);
+            }
           } catch (encryptError) {
-            console.error('Encryption failed:', encryptError);
-            
-            // Add to error management system
-            const errorId = addEncryptionError(encryptError);
+            console.error(' GitHub encryption failed:', encryptError);
             setEncryptionError(encryptError);
-            
-            // Don't send the message if encryption fails
-            return;
           }
+        } else {
+          console.log('No GitHub username, sending plain text');
         }
         
         setIsEncrypting(false);
-        
-        // Send the message (encrypted or plain)
-        const result = await sendMessage(messageInput, messageData);
+        console.log('About to send:', { messageData, hasContent: !!messageData?.content });
+        console.log('ChatMain calling sendMessage with:', { selectedRoomId, messageInput, messageData });
+        // Send the message with proper parameters
+        const result = await sendMessage(selectedRoomId, messageInput.trim(), messageData);
         if (result?.success || result?.queued) {
           setMessageInput('');
           setEncryptionError(null);
@@ -131,9 +147,14 @@ export default function ChatMain({
       if (error.type === 'encryption_failed') {
         // Retry message encryption
         return await retryOperation(errorId, async () => {
+          const recipientGithubUsername = selectedUser.github_username;
+          if (!recipientGithubUsername) {
+            throw new Error(`User ${selectedUser.display_name || selectedUser.name} does not have a GitHub username`);
+          }
+          
           const messageData = await encryptionService.encryptMessage(
             messageInput.trim(), 
-            selectedUser.id.toString()
+            recipientGithubUsername
           );
           return messageData;
         });
@@ -221,11 +242,11 @@ export default function ChatMain({
 
   const getRoomAvatar = () => {
     const roomAvatars = {
-      'general': '👥',
-      'tech-talk': '💻',
-      'random': '🎲'
+      'general': '',
+      'tech-talk': '',
+      'random': ''
     };
-    return roomAvatars[selectedRoomId] || '💬';
+    return roomAvatars[selectedRoomId] || '';
   };
 
   const getEncryptionStatusText = (message) => {

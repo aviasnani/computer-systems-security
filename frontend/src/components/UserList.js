@@ -10,11 +10,19 @@ const UserList = ({ currentUser, onStartChat }) => {
 
   const loadUsers = () => {
     console.log('UserList: loadUsers called');
+    console.log('UserList: WebSocket connected:', websocketService.getConnectionStatus());
+    console.log('UserList: Connection info:', websocketService.getConnectionInfo());
     setLoading(true);
 
     if (websocketService.getConnectionStatus()) {
       console.log('UserList: Requesting users from backend...');
       websocketService.requestAllUsers();
+      
+      // Set a timeout to stop loading if no response
+      setTimeout(() => {
+        console.log('UserList: Timeout waiting for users response');
+        setLoading(false);
+      }, 5000);
     } else {
       console.log('UserList: WebSocket not connected');
       setLoading(false);

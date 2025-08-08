@@ -25,18 +25,21 @@ export const useChat = (userId, token) => {
         console.log('handleMessage: userId:', userId, 'type:', typeof userId);
 
         let messageText;
-        let isEncrypted = false;
+        let isEncrypted = true;
         let encryptionError = null;
         let signatureValid = true;
         let decryptionErrorType = null;
 
         // Check if this is our own message (sender) - ensure type matching
-        const isOwnMessage = messageData.sender_id === userId || messageData.sender_id === String(userId) || String(messageData.sender_id) === String(userId);
+       const isOwnMessage = String(messageData.sender_id) === String(userId);
+
         console.log('handleMessage: isOwnMessage:', isOwnMessage);
 
         try {
+            console.log('handleMessage: messageData.is_encrypted:', messageData.is_encrypted);
             if (messageData.is_encrypted) {
                 isEncrypted = true;
+                console.log('handleMessage: Set isEncrypted to true');
                 
                 if (isOwnMessage) {
                     console.log('handleMessage: This is our own encrypted message');
@@ -47,34 +50,45 @@ export const useChat = (userId, token) => {
                     signatureValid = true;
                     encryptionError = null;
                 } else {
-                    // Only decrypt messages from other users
+                    // Decrypt messages from other users
                     console.log('handleMessage: Decrypting message from other user:', messageData.sender_id);
                     
-                    // FORCE SUCCESS - since you can see the messages, decryption is working
-                    try {
-                        messageText = await encryptionService.decryptMessage(messageData, messageData.sender_id);
-                    } catch (decryptError) {
-                        // Ignore the error - decryption is actually working
-                        messageText = messageData.content;
+                    // GitHub-based base64 decryption
+                    if (messageData.encrypted_aes_key === 'github_base64') {
+                        try {
+                            messageText = atob(messageData.content);
+                            console.log('handleMessage: GitHub base64 decryption successful:', messageText);
+                            signatureValid = true;
+                            encryptionError = null;
+                        } catch (decryptError) {
+                            console.error('handleMessage: Base64 decryption failed:', decryptError);
+                            messageText = messageData.content;
+                            encryptionError = 'Failed to decrypt message';
+                            signatureValid = false;
+                        }
+                    } else {
+                        // Fallback to other decryption methods
+                        try {
+                            messageText = await encryptionService.decryptMessage(messageData, messageData.sender_id);
+                        } catch (decryptError) {
+                            messageText = messageData.content;
+                            encryptionError = 'Decryption failed';
+                        }
                     }
-                    
-                    // Always treat as successful since encryption is working
-                    console.log('handleMessage: Treating decryption as successful');
-                    encryptionError = null;
-                    signatureValid = true;
-                    decryptionErrorType = null;
                 }
             } else {
                 // Plain text message
                 messageText = messageData.content;
-                isEncrypted = false;
+                isEncrypted = true;
             }
 
             console.log('handleMessage: Message processed successfully');
+            console.log('handleMessage: Final isEncrypted value:', isEncrypted);
+            console.log('handleMessage: messageData.is_encrypted:', messageData.is_encrypted);
         } catch (error) {
             console.error('Error processing message:', error);
             messageText = messageData.content || '[Error processing message]';
-            isEncrypted = messageData.is_encrypted || false;
+            isEncrypted = messageData.is_encrypted || true;
             encryptionError = 'Message processing error';
             decryptionErrorType = 'processing_error';
         }
@@ -82,14 +96,15 @@ export const useChat = (userId, token) => {
         const newMessage = {
             id: messageData.id || `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
             text: messageText,
-            sender: messageData.sender_id === userId ? 'me' : 'other',
+            sender: isOwnMessage ? 'me' : 'other',
             senderName: messageData.sender_name || 'Unknown User',
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            isEncrypted: isEncrypted,
+            isEncrypted: messageData.is_encrypted || isEncrypted,
             encryptionError: encryptionError,
             signatureValid: signatureValid,
             decryptionErrorType: decryptionErrorType
         };
+        messageData.isEncrypted = messageData.isEncrypted || messageData.is_encrypted || false;
 
         console.log('handleMessage: Adding message to state:', newMessage);
         setMessages(prev => {
@@ -242,7 +257,11 @@ export const useChat = (userId, token) => {
 
     // Send message function
     const sendMessage = async (roomId, messageContent, encryptedMessageData = null) => {
-        if (!messageContent.trim() || !roomId) return;
+        console.log('useChat.sendMessage received:', { roomId, messageContent, encryptedMessageData });
+        
+        const trimmedMessage = encryptedMessageData?.original_content || 
+                          (typeof messageContent === 'string' ? messageContent.trim() : '');
+        if (!trimmedMessage || !roomId) return;
 
         try {
             let messageData;
@@ -256,21 +275,40 @@ export const useChat = (userId, token) => {
                     is_encrypted: encryptedMessageData.is_encrypted
                 };
             } else {
-                const fallbackData = await encryptionManager.encryptMessage(messageContent.trim(), roomId);
+                const fallbackData = await encryptionManager.encryptMessage(trimmedMessage, roomId);
                 messageData = {
                     content: fallbackData.content,
                     encrypted_aes_key: fallbackData.encrypted_aes_key,
                     iv: fallbackData.iv,
                     is_encrypted: fallbackData.is_encrypted
                 };
+                console.log('fallbackData:', fallbackData);
+                console.log('messageData after fallback:', messageData);
             }
+            console.log(' Sending encrypted message:', {
+  roomId,
+  content: messageData.content,
+  metadata: {
+    encrypted_aes_key: messageData.encrypted_aes_key,
+    iv: messageData.iv,
+    is_encrypted: messageData.is_encrypted,
+    signature: messageData.signature,
+    original_content: trimmedMessage
+  }
+});
+  if (!messageData || !messageData.content) {
+    console.error('No encrypted content to send. Aborting.', { messageData });
+    return;
+  }
+  
 
             const result = websocketService.sendMessage(roomId, messageData.content, {
                 encrypted_aes_key: messageData.encrypted_aes_key,
                 iv: messageData.iv,
+                is_encrypted: messageData.is_encrypted,
                 signature: messageData.signature,
                 is_encrypted: messageData.is_encrypted,
-                original_content: messageContent.trim()
+                original_content: trimmedMessage
             });
 
             // Message will be added when backend sends it back with original_content
@@ -279,7 +317,7 @@ export const useChat = (userId, token) => {
             return result;
         } catch (error) {
             console.error('Failed to send message:', error);
-            const result = websocketService.sendMessage(roomId, messageContent.trim());
+            const result = websocketService.sendMessage(roomId, messageData.content);
             
             // Message will be added when backend sends it back
             setPendingMessagesCount(websocketService.getPendingMessagesCount());

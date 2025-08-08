@@ -41,6 +41,7 @@ class FirebaseAuthService:
     def verify_firebase_token(self, id_token):
         try:
             decoded_token = auth.verify_id_token(id_token)
+            print(f"DEBUG: Full decoded token: {decoded_token}")
                 
             user_info = {
                 'uid': decoded_token['uid'],
@@ -49,29 +50,27 @@ class FirebaseAuthService:
                 'picture': decoded_token.get('picture'),
                 'firebase': decoded_token.get('firebase')
             }
-            firebase_identites = decoded_token.get('firebase', {}).get('identities', {})
-
-            if 'github.com' in firebase_identites:
-                user_info['github_username'] = decoded_token.get('github_username')
-                user_info['github_id'] = decoded_token.get('github_id')
-
-                if not user_info['github_username']:
-                    provider_data = decoded_token.get('firebase', {}).get('sign_in_provider')
-                    if provider_data == "github.com":
-                        user_info['github_username'] = decoded_token.get('github_login')
-                        user_info['github_id'] = decoded_token.get('github_id')
+            
+            # Extract GitHub username from email if GitHub OAuth
+            email = decoded_token.get('email', '')
+            if 'github' in decoded_token.get('firebase', {}).get('sign_in_provider', ''):
+                # For GitHub OAuth, use email prefix as username fallback
+                github_username = email.split('@')[0] if email else None
+                user_info['github_username'] = github_username
+                print(f"DEBUG: Extracted GitHub username: {github_username}")
 
             return user_info
         
         except Exception as e:
             raise ValueError(f"Invalid Firebase token: {str(e)}")
 
-    def extract_github_info (self, firebase_user):
-        identities = firebase_user.get('firebase', {}).get('identities', {})
-        if 'github.com' in identities:
+    def extract_github_info(self, firebase_user):
+        # Check if user has GitHub username
+        github_username = firebase_user.get('github_username')
+        if github_username:
             return {
-                'username': firebase_user.get('github_username'),
-                'user_id': firebase_user.get('github_id'),
+                'username': github_username,
+                'user_id': firebase_user.get('github_id', 'unknown'),
                 'email': firebase_user.get('email')
             }
         return None
@@ -87,25 +86,36 @@ class FirebaseAuthService:
 
             if github_info:
                 user.github_username = github_info['username']
-                user.github_id = github_info['user_id']
+                user.github_user_id = github_info['user_id']
                 user.provider = 'github'
         else:
             email = firebase_user.get('email')
             if not email:
                 raise ValueError("Email is required from Firebase user but not provided.")
 
-            username = github_info['username'] if github_info else email.split('@')[0]
+            # Generate username from email if no GitHub info
+            if github_info and github_info['username']:
+                username = github_info['username']
+            else:
+                username = email.split('@')[0]
+            
+            print(f"DEBUG: Generated username: {username}")
+            
+            # Ensure username is unique
             base_username = username
             counter = 1
             while User.query.filter_by(username=username).first():
                 username = f"{base_username}{counter}"
                 counter += 1
+                
+            print(f"DEBUG: Final username: {username}")
 
             user = User(
                 firebase_uid=firebase_user['uid'],
                 email=email,
                 username=username,
                 name=firebase_user.get('name'),
+                display_name=firebase_user.get('name'),
                 profile_picture=firebase_user.get('picture'),
                 provider='github' if github_info else 'firebase',
                 github_username = github_info['username'] if github_info else None,

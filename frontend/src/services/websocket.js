@@ -153,6 +153,7 @@ class WebSocketService {
    * Send a message to a room
    */
   sendMessage(roomId, message, encryptionData = {}) {
+ 
     try {
       // Validate inputs
       const roomError = validateRoomId(roomId);

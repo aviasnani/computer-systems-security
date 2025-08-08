@@ -1,6 +1,7 @@
 import firebaseAuthService from './firebaseAuth';
-import githubKeyService from './githubKeyService';
+import githubKeyService from './gitHubService';
 import CryptoService from './cryptoService';
+import { manualKeyUpload } from '../utils/manualKeyUpload';
 
 class AuthService {
   async loginWithGitHub() {
@@ -28,19 +29,62 @@ class AuthService {
       
       // 4. Upload public key to GitHub
       if (user.data.github_username && githubToken) {
-        console.log('Uploading public key to GitHub...');
+        console.log('[AUTH] Uploading public key to GitHub for user:', user.data.github_username);
+        console.log('[AUTH] GitHub token available:', !!githubToken);
+        console.log('[AUTH] Public key preview:', keyPair.publicKey.substring(0, 50) + '...');
+        
+        let uploadSuccess = false;
+        
         try {
-          await githubKeyService.uploadPublicKey(keyPair.publicKey, githubToken);
-          console.log('Public key uploaded successfully');
+          const uploadResult = await githubKeyService.uploadPublicKey(keyPair.publicKey, githubToken);
+          console.log('[AUTH] Public key uploaded successfully:', uploadResult.id);
+          uploadSuccess = true;
+          
         } catch (keyError) {
-          console.warn('Failed to upload key to GitHub:', keyError.message);
-          // Continue anyway - user can upload manually
+          console.error('[AUTH] Upload failed:', keyError.message);
+          
+          // If upload fails, try with a fresh token
+          try {
+            console.log('[AUTH] Retrying with fresh token...');
+            const newAuth = await firebaseAuthService.signInWithGitHub();
+            const freshToken = newAuth.githubToken;
+            
+            if (freshToken !== githubToken) {
+              const retryResult = await githubKeyService.uploadPublicKey(keyPair.publicKey, freshToken);
+              console.log('[AUTH] Retry successful:', retryResult.id);
+              localStorage.setItem('github_token', freshToken);
+              uploadSuccess = true;
+            }
+          } catch (retryError) {
+            console.error('[AUTH] Retry failed:', retryError.message);
+          }
         }
+        
+        // Verify upload worked
+        if (uploadSuccess) {
+          setTimeout(async () => {
+            try {
+              const keys = await githubKeyService.fetchUserPublicKeys(user.data.github_username);
+              console.log('[AUTH] Verified:', keys.length, 'SSH keys on GitHub');
+            } catch (verifyError) {
+              console.error('[AUTH]  Verification failed - key may not be uploaded');
+            }
+          }, 1000);
+        } else {
+          console.error(' [AUTH]  SSH key upload completely failed');
+        }
+      } else {
+        console.warn('[AUTH] Missing GitHub username or token for key upload');
+        console.log('[AUTH] user.data.github_username:', user.data.github_username);
+        console.log('[AUTH] githubToken:', !!githubToken);
       }
       
       return {
         success: true,
-        user: user.data,
+        user: {
+          ...user.data,
+          uid: String(user.data.id)
+        },
         message: 'Login successful'
       };
       
@@ -90,6 +134,11 @@ class AuthService {
   
   getPrivateKey() {
     return localStorage.getItem('private_key');
+  }
+  
+  // Manual key upload for testing
+  async manualKeyUpload() {
+    return await manualKeyUpload();
   }
 }
 

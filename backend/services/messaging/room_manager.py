@@ -184,7 +184,7 @@ class RoomManager:
             print(f"Error broadcasting to room {room_id}: {str(e)}")
             return False
     
-    def broadcast_message_to_room(self, room_id: str, message: Message, exclude_sender: bool = True) -> bool:
+    def broadcast_message_to_room(self, room_id: str, message: Message, exclude_sender: bool = True, extra_data: dict = None) -> bool:
         """
         Broadcast a message to all users in a room.
         
@@ -192,12 +192,18 @@ class RoomManager:
             room_id: The ID of the room to broadcast to
             message: The Message object to broadcast
             exclude_sender: Whether to exclude the message sender from broadcast
+            extra_data: Additional data to include in the broadcast
             
         Returns:
             bool: True if broadcast was successful, False otherwise
         """
         try:
             message_data = message.to_dict()
+            
+            # Add extra data (like GitHub username) if provided
+            if extra_data:
+                message_data.update(extra_data)
+            
             exclude_user = message.sender_id if exclude_sender else None
             
             return self.broadcast_to_room(

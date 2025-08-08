@@ -119,13 +119,10 @@ class EncryptionManager {
     }
 
     /**
-     * Get room participants (simplified for demo)
-     * In a real app, this would fetch from the server
+     * Get room participants (disabled - using new GitHub-based encryption)
      */
     async getRoomParticipants(roomId) {
-        // For this demo, return empty array to disable encryption
-        // This prevents the RSA decryption error since messages will be plain text
-        // To test encryption, you'd need multiple users with different key pairs
+        // Always return empty to disable old encryption system
         return [];
     }
 

@@ -63,32 +63,32 @@ class EncryptionService {
   /**
    * Encrypt a message for sending to a specific recipient
    * @param {string} message - Plain text message to encrypt
-   * @param {string} recipientUserId - Recipient's user ID
+   * @param {string} recipientGithubUsername - Recipient's user ID
    * @returns {Promise<EncryptedMessageData>} Encrypted message data
    */
-  async encryptMessage(message, recipientUserId) {
-    console.log('🔐 [ENCRYPTION] Starting message encryption process');
-    console.log('🔐 [ENCRYPTION] Message length:', message.length, 'characters');
-    console.log('🔐 [ENCRYPTION] Recipient ID:', recipientUserId);
+  async encryptMessage(message, recipientGithubUsername) {
+    console.log('[ENCRYPTION] Starting message encryption process');
+    console.log('[ENCRYPTION] Message length:', message.length, 'characters');
+    console.log('[ENCRYPTION] Recipient username:', recipientGithubUsername);
     
     try {
       // Basic validation
       if (!message || typeof message !== 'string') {
-        console.error('🔐 [ENCRYPTION] ❌ Invalid message format');
+        console.error(' [ENCRYPTION] Invalid message format');
         throw new Error('Invalid message format');
       }
 
-      if (!recipientUserId) {
-        console.error('🔐 [ENCRYPTION] ❌ Recipient user ID is required');
-        throw new Error('Recipient user ID is required');
+      if (!recipientGithubUsername) {
+        console.error(' [ENCRYPTION]  Recipient Github username  is required');
+        throw new Error('Recipient github username is required');
       }
 
       if (!this.isEncryptionAvailable()) {
-        console.error('🔐 [ENCRYPTION] ❌ Encryption not available');
+        console.error('[ENCRYPTION]  Encryption not available');
         throw new Error('Encryption not available');
       }
 
-      console.log('🔐 [ENCRYPTION] ✅ Pre-flight checks passed');
+      console.log('[ENCRYPTION]  Pre-flight checks passed');
 
       // REAL RSA PUBLIC-PRIVATE KEY ENCRYPTION
       console.log('ENCRYPTION: Using REAL RSA public-private key encryption');
@@ -96,7 +96,7 @@ class EncryptionService {
       // Get recipient's public key with FRESH fetch
       let recipientKeyData;
       try {
-        recipientKeyData = await this._getRecipientPublicKey(recipientUserId);
+        recipientKeyData = await this._getRecipientPublicKey(recipientGithubUsername);
         console.log('ENCRYPTION: Got FRESH recipient public key, ID:', recipientKeyData.keyId);
       } catch (error) {
         console.error('ENCRYPTION: No recipient public key, sending plain text');
@@ -135,7 +135,7 @@ class EncryptionService {
         is_encrypted: true,
         sender_id: this.currentUserId,
         recipient_key_id: recipientKeyData.keyId,
-        intended_recipient: recipientUserId
+        intended_recipient: recipientGithubUsername
       };
 
       console.log('ENCRYPTION: REAL RSA encryption completed!');
@@ -156,13 +156,13 @@ class EncryptionService {
    * @returns {Promise<string>} Decrypted plain text message
    */
   async decryptMessage(encryptedData, senderUserId) {
-    console.log('🔓 [DECRYPTION] Starting message decryption process');
-    console.log('🔓 [DECRYPTION] Sender ID:', senderUserId);
-    console.log('🔓 [DECRYPTION] Is encrypted:', encryptedData?.is_encrypted);
+    console.log('[DECRYPTION] Starting message decryption process');
+    console.log('[DECRYPTION] Sender ID:', senderUserId);
+    console.log('DECRYPTION] Is encrypted:', encryptedData?.is_encrypted);
     
     try {
       if (!encryptedData) {
-        console.error('🔓 [DECRYPTION] ❌ No encrypted data provided');
+        console.error('[DECRYPTION]  No encrypted data provided');
         throw new Error('No encrypted data provided');
       }
 
@@ -245,7 +245,7 @@ class EncryptionService {
       if (encryptedData.signature && senderUserId) {
         console.log('DECRYPTION: Verifying signature with sender\'s PUBLIC key...');
         const senderPublicKey = await this._getRecipientPublicKey(senderUserId);
-        const isValid = await this._verifyWithPublicKey(decryptedMessage, encryptedData.signature, senderPublicKey);
+        const isValid = await this._verifyWithPublicKey(decryptedMessage, encryptedData.signature, senderPublicKey.publicKey);
         if (!isValid) {
           console.warn('DECRYPTION: Signature verification failed!');
         } else {
@@ -481,38 +481,21 @@ class EncryptionService {
    * @param {string} recipientUserId - Recipient's user ID
    * @returns {Promise<{publicKey: string, keyId: string}>} Public key with ID
    */
-  async _getRecipientPublicKey(recipientUserId) {
-    console.log('KEY_EXCHANGE: FRESH fetch of public key for recipient:', recipientUserId);
+  async _getRecipientPublicKey(recipientGithubUsername) {
+    console.log('KEY_EXCHANGE: FRESH fetch of public key for recipient:', recipientGithubUsername);
     
-    try {
-      // ALWAYS fetch fresh from server - no caching
-      const response = await fetch(`http://127.0.0.1:5000/api/users/${recipientUserId}/public-key`, {
-        method: 'GET',
-        credentials: 'include',
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch key: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      const publicKey = data.data.public_key;
-      const keyVersion = data.data.key_version;
-      
-      console.log('KEY_EXCHANGE: Fresh public key retrieved for user:', recipientUserId);
-      console.log('KEY_EXCHANGE: Key version:', keyVersion);
-      
-      return {
-        publicKey: publicKey,
-        keyId: `${recipientUserId}_v${keyVersion}`
-      };
+      try {
+        // Directly fetch PEM from GitHub via keyExchangeService
+        const pemKey = await keyExchangeService.getUserPublicKey(recipientGithubUsername);
+
+        // Wrap with a default key version (you can enhance this later if you want rotation)
+        return {
+            publicKey: pemKey,
+            keyId: `${recipientGithubUsername}_v1`
+        };
     } catch (error) {
-      console.error('KEY_EXCHANGE: Failed to get recipient public key:', error);
-      throw new Error(`Cannot encrypt: recipient has no public key`);
+        console.error('KEY_EXCHANGE: Failed to fetch public key from GitHub:', error.message);
+        throw new Error(`Cannot fetch public key for ${recipientGithubUsername}`);
     }
   }
 
@@ -564,27 +547,27 @@ class EncryptionService {
    * @returns {Promise<boolean>} True if signature is valid
    */
   async _verifyMessageSignature(message, signature, senderUserId) {
-    console.log('✍️ [SIGNATURE] Verifying message signature from sender:', senderUserId);
+    console.log('[SIGNATURE] Verifying message signature from sender:', senderUserId);
     
     try {
-      console.log('✍️ [SIGNATURE] Getting sender public key for verification...');
+      console.log('[SIGNATURE] Getting sender public key for verification...');
       const senderPublicKey = await this._getRecipientPublicKey(senderUserId);
-      console.log('✍️ [SIGNATURE] ✅ Sender public key obtained');
+      console.log('[SIGNATURE]  Sender public key obtained');
       
-      console.log('✍️ [SIGNATURE] Verifying RSA signature...');
+      console.log('[SIGNATURE] Verifying RSA signature...');
       const isValid = await CryptoService.verifyRSASignature(message, signature, senderPublicKey);
       
       if (!isValid) {
-        console.warn('✍️ [SIGNATURE] ❌ Signature verification failed for message from', senderUserId);
+        console.warn('[SIGNATURE]  Signature verification failed for message from', senderUserId);
         this.lastError = this._createErrorInfo(EncryptionErrorTypes.SIGNATURE_VERIFICATION_FAILED, 
           new Error('Message signature verification failed'));
       } else {
-        console.log('✍️ [SIGNATURE] ✅ Signature verification successful - message is authentic');
+        console.log(' [SIGNATURE]  Signature verification successful - message is authentic');
       }
       
       return isValid;
     } catch (error) {
-      console.error('✍️ [SIGNATURE] ❌ Signature verification error:', error);
+      console.error(' [SIGNATURE]  Signature verification error:', error);
       this.lastError = this._createErrorInfo(EncryptionErrorTypes.SIGNATURE_VERIFICATION_FAILED, error);
       return false;
     }
@@ -747,23 +730,14 @@ class EncryptionService {
    * Sign data with RSA private key
    */
   async _signWithPrivateKey(data, privateKeyPem) {
-    console.log('RSA_SIGN: Signing with private key');
-    const combined = data + privateKeyPem.substring(0, 100);
-    const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(combined));
-    return btoa(String.fromCharCode(...new Uint8Array(hash)));
+    return await CryptoService.signWithRSA(data, privateKeyPem);
   }
 
   /**
    * Verify signature with RSA public key
    */
   async _verifyWithPublicKey(data, signature, publicKeyPem) {
-    console.log('RSA_VERIFY: Verifying with public key');
-    try {
-      atob(signature);
-      return signature.length > 20;
-    } catch {
-      return false;
-    }
+    return await CryptoService.verifyRSASignature(data, signature, publicKeyPem);
   }
 }
 

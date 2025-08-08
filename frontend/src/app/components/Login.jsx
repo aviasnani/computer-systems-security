@@ -1,9 +1,10 @@
 'use client'
 import React, { useState, useEffect } from 'react';
 import { signInWithPopup } from 'firebase/auth';
-import { auth, googleProvider } from '../../firebase.config';
+import { auth, googleProvider, githubProvider } from '../../firebase.config';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../context/AuthContext';
+import authService from '../../services/authService';
 
 function Login() {
   const [error, setError] = useState('');
@@ -17,6 +18,39 @@ function Login() {
       router.push('/home');
     }
   }, [currentUser, router]);
+
+  const handleGitHubLogin = async () => {
+    try {
+      setError('');
+      setLoading(true);
+      
+      const result = await authService.loginWithGitHub();
+      
+      if (result.success) {
+        console.log('GitHub login successful:', result.user);
+        
+        // Force upload SSH key after login
+        try {
+          console.log(' [LOGIN] Force uploading SSH key...');
+          await authService.manualKeyUpload();
+          console.log('[LOGIN]  SSH key uploaded successfully');
+        } catch (keyError) {
+          console.error(' [LOGIN]  SSH key upload failed:', keyError);
+          // Continue anyway
+        }
+        
+        router.push('/chat');
+      } else {
+        setError(result.error || 'GitHub authentication failed');
+      }
+      
+    } catch (error) {
+      console.error('GitHub login error:', error);
+      setError('Failed to sign in with GitHub. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleLogin = async (provider) => {
     try {
@@ -107,6 +141,20 @@ function Login() {
           disabled={loading}
         >
           {loading ? 'Signing in...' : 'Sign In with Google'}
+        </button>
+        
+        <button 
+          onClick={handleGitHubLogin} 
+          style={{
+            ...styles.button,
+            backgroundColor: '#333',
+            marginTop: '10px',
+            opacity: loading ? 0.6 : 1,
+            cursor: loading ? 'not-allowed' : 'pointer'
+          }}
+          disabled={loading}
+        >
+          {loading ? 'Signing in...' : 'Sign In with GitHub'}
         </button>
       </div>
     </div>

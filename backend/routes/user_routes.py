@@ -79,13 +79,32 @@ def update_public_key(user_id):
         traceback.print_exc()
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
+@user_bp.route('/users/<int:user_id>', methods=['GET'])
+def get_user(user_id):
+    try:
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({'status': 'error', 'message': 'User not found'}), 404
+
+        return jsonify({
+            'status': 'success',
+            'data': {
+                'id': user.id,
+                'username': user.username,
+                'email': user.email,
+                'display_name': user.display_name or user.name or user.username,
+                'name': user.name,
+                'github_username': user.github_username,
+                'is_online': user.is_online,
+                'last_seen': user.last_seen.isoformat() if user.last_seen else None
+            }
+        }), 200
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
 @user_bp.route('/users', methods=['GET'])
 def get_all_users():
     try:
-        # Temporarily disable auth check for testing
-        # if not session.get('user_id'):
-        #     return jsonify({'status': 'error', 'message': 'Not authenticated'}), 401
-
         users = User.query.all()
         return jsonify({
             'status': 'success',
@@ -93,9 +112,10 @@ def get_all_users():
                 'id': user.id,
                 'username': user.username,
                 'email': user.email,
-                'display_name': user.username,
+                'display_name': user.display_name or user.name or user.username,
                 'name': user.name or user.username,
-                'has_public_key': user.public_key is not None
+                'github_username': user.github_username,
+                'has_public_key': False
             } for user in users]
         }), 200
     except Exception as e:
@@ -104,10 +124,6 @@ def get_all_users():
 @user_bp.route('/users/search', methods=['GET'])
 def search_users():
     try:
-        # Temporarily disable auth check for testing
-        # if not session.get('user_id'):
-        #     return jsonify({'status': 'error', 'message': 'Not authenticated'}), 401
-
         query = request.args.get('q', '').strip()
         if not query:
             return jsonify({'status': 'error', 'message': 'Query required'}), 400
@@ -123,9 +139,10 @@ def search_users():
                 'id': user.id,
                 'username': user.username,
                 'email': user.email,
-                'display_name': user.username,
+                'display_name': user.display_name or user.name or user.username,
                 'name': user.name or user.username,
-                'has_public_key': user.public_key is not None
+                'github_username': user.github_username,
+                'has_public_key': False
             } for user in users]
         }), 200
     except Exception as e:

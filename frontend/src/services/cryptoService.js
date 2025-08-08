@@ -14,6 +14,12 @@ class CryptoService {
         try {
             console.log('Generating RSA-2048 key pair...');
             
+            // Check if Web Crypto API is available
+            if (!crypto || !crypto.subtle || !crypto.subtle.generateKey) {
+                console.warn('Web Crypto API not available, using JSEncrypt fallback');
+                return this._generateRSAKeyPairFallback();
+            }
+            
             // Generate RSA key pair with EXACT same parameters
             const keyPair = await crypto.subtle.generateKey(
                 {
@@ -574,6 +580,30 @@ class CryptoService {
             false,
             ['decrypt']
         );
+    }
+    
+    // Fallback RSA key generation using JSEncrypt
+    static _generateRSAKeyPairFallback() {
+        try {
+            console.log('Using JSEncrypt fallback for key generation');
+            const jsencrypt = new JSEncrypt({ default_key_size: 2048 });
+            
+            // Generate key pair
+            const keyPair = jsencrypt.getKey();
+            
+            const publicKey = keyPair.getPublicKey();
+            const privateKey = keyPair.getPrivateKey();
+            
+            console.log('JSEncrypt key pair generated successfully');
+            
+            return {
+                publicKey: publicKey,
+                privateKey: privateKey
+            };
+        } catch (error) {
+            console.error('JSEncrypt fallback failed:', error);
+            throw new Error(`Fallback key generation failed: ${error.message}`);
+        }
     }
 }
 

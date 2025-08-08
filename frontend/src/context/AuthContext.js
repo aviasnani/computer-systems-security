@@ -38,12 +38,13 @@ export const AuthProvider = ({ children }) => {
         if (data.status === 'success') {
           // Create user object compatible with the app
           const user = {
-            uid: data.data.id.toString(),
-            email: data.data.email,
-            displayName: data.data.display_name,
-            username: data.data.username,
-            photoURL: data.data.profile_picture,
-            accessToken: 'local-auth-token'
+             uid: data.data.id.toString(),
+              email: data.data.email,
+              displayName: data.data.display_name,
+              username: data.data.username,
+              githubUsername: data.data.github_username,  
+              photoURL: data.data.profile_picture,
+              accessToken: 'local-auth-token'
           };
           setCurrentUser(user);
           setError(null);
