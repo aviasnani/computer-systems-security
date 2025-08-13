@@ -1,0 +1,23 @@
+{
+  "pages": {
+    "/chat/page": [
+      "static/chunks/[root-of-the-server]__a2f1cdd3._.css",
+      "static/chunks/src_services_bd6fa131._.js",
+      "static/chunks/node_modules_586bef67._.js",
+      "static/chunks/src_21d2094d._.js",
+      "static/chunks/src_app_layout_c0237562.js",
+      "static/chunks/_a04f4190._.js",
+      "static/chunks/src_app_chat_layout_11e438bc.js",
+      "static/chunks/src_96b9c99f._.js",
+      "static/chunks/node_modules_dffaf3b7._.js",
+      "static/chunks/src_app_chat_page_e66abc1e.js",
+      "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_fd44f5a4._.js",
+      "static/chunks/node_modules_next_dist_compiled_2ce9398a._.js",
+      "static/chunks/node_modules_next_dist_client_8f19e6fb._.js",
+      "static/chunks/node_modules_next_dist_2ecbf5fa._.js",
+      "static/chunks/node_modules_@swc_helpers_cjs_00636ac3._.js",
+      "static/chunks/_e69f0d32._.js",
+      "static/chunks/_93808211._.js"
+    ]
+  }
+}

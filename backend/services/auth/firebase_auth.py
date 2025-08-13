@@ -76,8 +76,10 @@ class FirebaseAuthService:
         return None
             
     def get_or_create_user(self, firebase_user):
+        # First check by firebase_uid
         user = User.query.filter_by(firebase_uid=firebase_user['uid']).first()
         github_info = self.extract_github_info(firebase_user)
+        
         if user:
             # Update existing user
             user.name = firebase_user.get('name', user.name)
@@ -89,40 +91,55 @@ class FirebaseAuthService:
                 user.github_user_id = github_info['user_id']
                 user.provider = 'github'
         else:
+            # Check if user exists by email or github_user_id
             email = firebase_user.get('email')
             if not email:
                 raise ValueError("Email is required from Firebase user but not provided.")
-
-            # Generate username from email if no GitHub info
-            if github_info and github_info['username']:
-                username = github_info['username']
+            
+            existing_user = User.query.filter_by(email=email).first()
+            if github_info and github_info['user_id'] != 'unknown':
+                existing_github_user = User.query.filter_by(github_user_id=github_info['user_id']).first()
+                if existing_github_user:
+                    existing_user = existing_github_user
+            
+            if existing_user:
+                # Update existing user with Firebase UID
+                existing_user.firebase_uid = firebase_user['uid']
+                existing_user.name = firebase_user.get('name', existing_user.name)
+                existing_user.profile_picture = firebase_user.get('picture', existing_user.profile_picture)
+                existing_user.last_seen = datetime.now(timezone.utc)
+                if github_info:
+                    existing_user.github_username = github_info['username']
+                    existing_user.github_user_id = github_info['user_id']
+                    existing_user.provider = 'github'
+                user = existing_user
             else:
-                username = email.split('@')[0]
-            
-            print(f"DEBUG: Generated username: {username}")
-            
-            # Ensure username is unique
-            base_username = username
-            counter = 1
-            while User.query.filter_by(username=username).first():
-                username = f"{base_username}{counter}"
-                counter += 1
+                # Create new user
+                if github_info and github_info['username']:
+                    username = github_info['username']
+                else:
+                    username = email.split('@')[0]
                 
-            print(f"DEBUG: Final username: {username}")
+                # Ensure username is unique
+                base_username = username
+                counter = 1
+                while User.query.filter_by(username=username).first():
+                    username = f"{base_username}{counter}"
+                    counter += 1
 
-            user = User(
-                firebase_uid=firebase_user['uid'],
-                email=email,
-                username=username,
-                name=firebase_user.get('name'),
-                display_name=firebase_user.get('name'),
-                profile_picture=firebase_user.get('picture'),
-                provider='github' if github_info else 'firebase',
-                github_username = github_info['username'] if github_info else None,
-                github_user_id = github_info['user_id'] if github_info else None,
-                last_seen=datetime.now(timezone.utc)
-            )
-            db.session.add(user)
+                user = User(
+                    firebase_uid=firebase_user['uid'],
+                    email=email,
+                    username=username,
+                    name=firebase_user.get('name'),
+                    display_name=firebase_user.get('name'),
+                    profile_picture=firebase_user.get('picture'),
+                    provider='github' if github_info else 'firebase',
+                    github_username = github_info['username'] if github_info else None,
+                    github_user_id = github_info['user_id'] if github_info and github_info['user_id'] != 'unknown' else None,
+                    last_seen=datetime.now(timezone.utc)
+                )
+                db.session.add(user)
         
         db.session.commit()
         return user
