@@ -1,21 +1,24 @@
-
 ### Prerequisites
+
 - **Python 3.8+** (for backend)
 - **Node.js 18+** (for frontend)
 - **Git**
 
 ### 1. Clone the Repository
+
 ```bash
-git clone <your-repository-url>
-cd test
+git clone git@github.com:aviasnani/computer-systems-security.git
+
 ```
 
 ### 1. Navigate to Backend Directory
+
 ```bash
 cd backend
 ```
 
 ### 2. Create Virtual Environment
+
 ```bash
 # Windows
 python -m venv venv
@@ -27,11 +30,13 @@ source venv/bin/activate
 ```
 
 ### 3. Install Dependencies
+
 ```bash
 pip install -r requirements.txt
 ```
 
 ### 4. Set Up Environment Variables
+
 ```bash
 # Copy example environment file
 copy .env.example .env
@@ -44,6 +49,7 @@ copy .env.example .env
 ```
 
 ### 5. Initialize Database
+
 ```bash
 # Reset and create database
 python reset_db.py
@@ -52,36 +58,45 @@ python reset_db.py
 ### 6. Run Backend Server
 
 #### Development Mode:
+
 ```bash
 python run.py
 ```
-*Tries ports 5000, 5001, 5002, 5003, 8000 automatically*
+
+_Tries ports 5000, 5001, 5002, 5003, 8000 automatically_
 
 #### Production Mode:
+
 ```bash
 python run_production.py
 ```
-*Runs on configured port with production settings*
+
+_Runs on configured port with production settings_
 
 #### Local Development Helper:
+
 ```bash
 python run_local.py
 ```
-*Sets up local development environment*
 
-## 🎨 Frontend Setup
+_Sets up local development environment_
+
+## Frontend Setup
 
 ### 1. Navigate to Frontend Directory
+
 ```bash
 cd frontend
 ```
 
 ### 2. Install Dependencies
+
 ```bash
 npm install
 ```
 
 ### 3. Set Up Environment Variables
+
 ```bash
 # Copy example environment file (if exists)
 copy .env.example .env.local
@@ -93,12 +108,15 @@ NEXT_PUBLIC_API_URL=http://localhost:5000/api
 ```
 
 ### 4. Run Frontend Development Server
+
 ```bash
 npm run dev
 ```
-*Runs on http://localhost:3000 (or next available port)*
+
+_Runs on http://localhost:3000 (or next available port)_
 
 ### 5. Build for Production
+
 ```bash
 # Build production bundle
 npm run build
@@ -110,13 +128,14 @@ npm start
 ## 🏃‍♂️ Running Both Services
 
 ### Option 1: Separate Terminals
+
 ```bash
 # Terminal 1 - Backend
 cd backend
 venv\Scripts\activate  # Windows
 python run.py
 
-# Terminal 2 - Frontend  
+# Terminal 2 - Frontend
 cd frontend
 npm run dev
 ```
@@ -158,27 +177,30 @@ computer-systems-security/
 - **Backend API**: http://localhost:5000
 - **WebSocket**: ws://localhost:5000
 
-
 ## 🚨 Troubleshooting
 
 ### Backend Issues
+
 - **Port already in use**: `run.py` automatically tries different ports
 - **Database errors**: Run `python reset_db.py`
 - **Import errors**: Ensure virtual environment is activated
 
 ### Frontend Issues
+
 - **WebSocket connection failed**: Check if backend is running on port 5000
 - **Build errors**: Delete `node_modules` and run `npm install`
 - **Environment variables**: Ensure `.env.local` exists with correct values
 
 ### Common Issues
+
 - **CORS errors**: Check `CORS_ORIGINS` in backend `.env`
-- **Authentication**: Verify Firebase credentials 
+- **Authentication**: Verify Firebase credentials
 - **Encryption errors**: Check browser console for crypto API support
 
 ## 📝 Environment Variables
 
 ### Backend (.env)
+
 ```bash
 FLASK_ENV=development
 SECRET_KEY=your-secret-key
@@ -188,10 +210,9 @@ CORS_ORIGINS=http://localhost:3000
 ```
 
 ### Frontend (.env.local)
+
 ```bash
 NODE_ENV=development
 NEXT_PUBLIC_WEBSOCKET_URL=http://localhost:5000
 NEXT_PUBLIC_API_URL=http://localhost:5000/api
 ```
-
-
