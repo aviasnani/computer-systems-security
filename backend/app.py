@@ -15,13 +15,13 @@ app.config.from_object(Config)
 
 CORS(app, supports_credentials=True, origins=[
     "http://localhost:3000", 
-    "https://encryptalk-lj7yov42j-aviasnanis-projects.vercel.app",
+    "https://encryptalk-ezgjmhnbo-aviasnanis-projects.vercel.app",
     "https://computer-systems-security-5.onrender.com"
 ])
 
 socketio = SocketIO(app, cors_allowed_origins=[
     "http://localhost:3000", 
-    "https://encryptalk-lj7yov42j-aviasnanis-projects.vercel.app",
+    "https://encryptalk-ezgjmhnbo-aviasnanis-projects.vercel.app",
     "https://computer-systems-security-5.onrender.com"
 ])
 
@@ -43,4 +43,9 @@ socket_handler = SocketHandler(socketio)
 def index():
     return jsonify({"status": "ok", "message": "Server is running"})
 
+@app.route('/health')
+def health():
+    return jsonify({"status": "ok", "message": "Server is healthy"})
 
+if __name__ == '__main__':
+    socketio.run(app, debug=True, host='0.0.0.0', port=5000)

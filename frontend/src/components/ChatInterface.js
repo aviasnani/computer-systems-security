@@ -96,7 +96,7 @@ function ChatInterface({ roomId }) {
     getDebugInfo
   } = useChat(
     currentUser?.uid,
-    currentUser?.accessToken
+    currentUser?.accessToken || 'local-auth-token'
   );
 
   // Handle responsive design
@@ -231,12 +231,15 @@ function ChatInterface({ roomId }) {
   };
 
   // Show loading state if user data is not available
-  if (!currentUser?.uid || !currentUser?.accessToken) {
+  if (!currentUser?.uid) {
     return (
       <div className="flex h-screen items-center justify-center bg-white">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading chat...</p>
+          {connectionError && (
+            <p className="text-red-600 text-sm mt-2">{connectionError}</p>
+          )}
         </div>
       </div>
     );
