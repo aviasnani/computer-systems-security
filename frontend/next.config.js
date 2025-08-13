@@ -35,8 +35,8 @@ const nextConfig = {
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "font-src 'self' https://fonts.gstatic.com",
               "img-src 'self' data: https: blob:",
-              "connect-src 'self' http://localhost:5000 https://identitytoolkit.googleapis.com https://securetoken.googleapis.com wss: ws:",
-              "frame-src 'self' https://accounts.google.com",
+              "connect-src 'self' http://localhost:5000 https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://apis.google.com https://github.com https://api.github.com https://computer-systems-security-5.onrender.com wss: ws:",
+              "frame-src 'self' https://accounts.google.com https://github.com https://api.github.com https://abcd-575dd.firebaseapp.com",
               "object-src 'none'",
               "base-uri 'self'",
               "form-action 'self'"

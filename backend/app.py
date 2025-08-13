@@ -13,10 +13,17 @@ from services.messaging.socket_handler import SocketHandler
 app = Flask(__name__)
 app.config.from_object(Config)
 
-#CORS(app, supports_credentials=True)
-CORS(app)
-#socketio = SocketIO(app, cors_allowed_origins="*")
-socketio = SocketIO(app)
+CORS(app, supports_credentials=True, origins=[
+    "http://localhost:3000", 
+    "https://encryptalk-lj7yov42j-aviasnanis-projects.vercel.app",
+    "https://computer-systems-security-5.onrender.com"
+])
+
+socketio = SocketIO(app, cors_allowed_origins=[
+    "http://localhost:3000", 
+    "https://encryptalk-lj7yov42j-aviasnanis-projects.vercel.app",
+    "https://computer-systems-security-5.onrender.com"
+])
 
 # Initialize extensions
 db.init_app(app)
