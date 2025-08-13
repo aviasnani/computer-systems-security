@@ -1,8 +1,13 @@
 ### Prerequisites
 
 - **Python 3.8+** (for backend)
-- **Node.js 18+** (for frontend)
+- **JavaScript 18+** (for frontend)
 - **Git**
+
+### Deployment
+
+https://encryptalk-ezgjmhnbo-aviasnanis-projects.vercel.app
+
 
 ### 1. Clone the Repository
 
@@ -125,7 +130,7 @@ npm run build
 npm start
 ```
 
-## 🏃‍♂️ Running Both Services
+##🏃‍♂️ Running Both Services
 
 ### Option 1: Separate Terminals
 
@@ -140,7 +145,7 @@ cd frontend
 npm run dev
 ```
 
-## 📁 Project Structure
+##  Project Structure
 
 ```
 computer-systems-security/
@@ -163,7 +168,7 @@ computer-systems-security/
 └── README.md              # This file
 ```
 
-## 🔐 Security Features
+##  Security Features
 
 - **End-to-End Encryption**: RSA-2048 + AES-256-GCM
 - **Message Signatures**: RSA digital signatures for authenticity
@@ -171,13 +176,13 @@ computer-systems-security/
 - **Secure Key Storage**: Browser localStorage with validation
 - **No Server Access**: Backend never sees plaintext messages
 
-## 🌐 Default URLs
+##  Default URLs
 
 - **Frontend**: http://localhost:3000
 - **Backend API**: http://localhost:5000
 - **WebSocket**: ws://localhost:5000
 
-## 🚨 Troubleshooting
+##  Troubleshooting
 
 ### Backend Issues
 
@@ -197,7 +202,7 @@ computer-systems-security/
 - **Authentication**: Verify Firebase credentials
 - **Encryption errors**: Check browser console for crypto API support
 
-## 📝 Environment Variables
+##  Environment Variables
 
 ### Backend (.env)
 
