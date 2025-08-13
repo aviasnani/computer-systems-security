@@ -11,6 +11,6 @@ class Config:
   SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(instance_path, 'database.db')
   SQLALCHEMY_TRACK_MODIFICATIONS = False 
   SESSION_COOKIE_SECURE = True
-  SECRET_KEY = 'AviPushGarAdi@004'
+  SECRET_KEY = os.getenv('SECRET_KEY')
   SESSION_COOKIE_SAMESITE = 'None'
   SESSION_COOKIE_SECURE = True
