@@ -221,3 +221,6 @@ NODE_ENV=development
 NEXT_PUBLIC_WEBSOCKET_URL=http://localhost:5000
 NEXT_PUBLIC_API_URL=http://localhost:5000/api
 ```
+### References
+
+References have been included in the documentation submitted using the submission link. The final implementation of this project has been customized according to the requirements of the project inspired by the ideas and suggestions of LLMS. However, the final implementation has not been fully copied from any of these sources.
