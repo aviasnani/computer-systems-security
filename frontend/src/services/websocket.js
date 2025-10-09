@@ -29,7 +29,7 @@ class WebSocketService {
 
     // Get server URL from environment or default to localhost
     const serverUrl =
-      process.env.NEXT_PUBLIC_WEBSOCKET_URL || "http://localhost:5000";
+      process.env.NEXT_PUBLIC_WEBSOCKET_URL || "http://localhost:5001";
 
     this.socket = io(serverUrl, {
       auth: {
@@ -99,7 +99,7 @@ class WebSocketService {
   /**
    * Send a message to a room
    */
-  sendMessage(roomId, message) {
+  sendMessage(roomId, message, encryptionData = null) {
     const messageData = {
       sender_id: this.socket?.auth?.user_id || this.socket?.auth?.userId,
       room_id: roomId,
@@ -108,6 +108,14 @@ class WebSocketService {
       id: Date.now() + Math.random(), // Temporary ID for tracking
       timestamp: new Date().toISOString(),
     };
+
+    // Add encryption data if provided
+    if (encryptionData) {
+      messageData.is_encrypted = encryptionData.is_encrypted;
+      messageData.encryption_type = encryptionData.encryption_type;
+      messageData.encrypted_aes_key = encryptionData.encrypted_aes_key;
+      messageData.iv = encryptionData.iv;
+    }
 
     if (this.socket && this.isConnected) {
       try {

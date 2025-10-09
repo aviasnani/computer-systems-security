@@ -2,26 +2,40 @@ from flask import Blueprint, request, jsonify, session
 from functools import wraps
 from services.auth.firebase_auth import FirebaseAuthService
 from flask_socketio import disconnect
+from models.user import User
+from extensions import db, bcrypt
+from datetime import datetime, timezone
 
 auth_bp = Blueprint('auth', __name__)
 firebase_auth = FirebaseAuthService()
+
 #authorization header is used to authenticate the user
 def require_auth(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        auth_header = request.headers.get('Authorization')
-        if not auth_header or not auth_header.startswith('Bearer '):
-            return jsonify({'status': 'error', 'message': 'No token provided'}), 401
+        # Check if user is authenticated via session
+        if not session.get('authenticated') or not session.get('user_id'):
+            return jsonify({'status': 'error', 'message': 'Authentication required'}), 401
             
         try:
-            token = auth_header.split('Bearer ')[1]
-            firebase_user = firebase_auth.verify_firebase_token(token)
-            request.user = firebase_user
+            # Get user from database
+            user = User.query.get(session['user_id'])
+            if not user:
+                return jsonify({'status': 'error', 'message': 'User not found'}), 404
+            
+            # Add user info to request
+            request.user = {
+                'uid': user.firebase_uid,
+                'id': user.id,
+                'email': user.email,
+                'name': user.name
+            }
             return f(*args, **kwargs)
         except Exception as e:
-            return jsonify({'status': 'error', 'message': 'Invalid token'}), 401
+            return jsonify({'status': 'error', 'message': 'Authentication failed'}), 401
             
     return decorated
+
 #Frontend sends firebase token to this route make sure 
 @auth_bp.route('/firebase', methods=['POST'])
 def firebase_auth_handler():
@@ -71,6 +85,7 @@ def manual_signup():
         email = data.get('email')
         password = data.get('password')
         name = data.get('name')
+        username = data.get('username')
         
         if not email or not password:
             return jsonify({'status': 'error', 'message': 'Email and password required'}), 400
@@ -79,24 +94,41 @@ def manual_signup():
         if User.query.filter_by(email=email).first():
             return jsonify({'status': 'error', 'message': 'User already exists'}), 400
             
+        # Generate username if not provided
+        if not username:
+            username = email.split('@')[0]
+            
+        # Check if username is taken
+        if User.query.filter_by(username=username).first():
+            username = f"{username}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        
+        # Hash password
+        hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
+        
         # Create user
         user = User(
             email=email,
-            username=email,
+            username=username,
             name=name or email.split('@')[0],
+            password=hashed_password,
             firebase_uid=f'manual_{email}',
             provider='manual'
         )
         
         db.session.add(user)
-        db.session.commit()
+        try:
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'status': 'error', 'message': f'Database error: {str(e)}'}), 500
         
         return jsonify({
             'status': 'success',
             'user': {
                 'id': user.id,
                 'email': user.email,
-                'name': user.name
+                'name': user.name,
+                'username': user.username
             }
         }), 201
         
@@ -118,7 +150,15 @@ def manual_login():
         if not user:
             return jsonify({'status': 'error', 'message': 'User not found'}), 404
             
-        # For demo, accept any password
+        # Verify password
+        if not bcrypt.check_password_hash(user.password, password):
+            return jsonify({'status': 'error', 'message': 'Invalid password'}), 401
+            
+        # Update last seen
+        user.last_seen = datetime.now(timezone.utc)
+        db.session.commit()
+            
+        # Set session
         session['user_id'] = user.id
         session['firebase_uid'] = user.firebase_uid
         session['authenticated'] = True
@@ -129,6 +169,7 @@ def manual_login():
                 'id': user.id,
                 'email': user.email,
                 'name': user.name,
+                'username': user.username,
                 'uid': user.firebase_uid
             }
         }), 200
