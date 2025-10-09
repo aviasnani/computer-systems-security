@@ -48,7 +48,7 @@ export const useKeyManagement = (userId) => {
       const token = await user.getIdToken();
       console.log('Got Firebase token:', token ? 'Yes' : 'No');
       
-      const response = await fetch("http://localhost:5001/api/public-key", {
+      const response = await fetch("http://localhost:5000/api/public-key", {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",

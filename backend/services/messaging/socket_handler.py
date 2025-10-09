@@ -150,13 +150,6 @@ class SocketHandler:
                 content = data.get('content')
                 message_type = data.get('message_type', 'text')
                 
-                # Encryption metadata
-                is_encrypted = data.get('is_encrypted', False)
-                encryption_type = data.get('encryption_type')
-                encrypted_aes_key = data.get('encrypted_aes_key')
-                iv = data.get('iv')
-                key_version = data.get('key_version')
-                
                 if not sender_id or not room_id or not content:
                     emit('message_error', {
                         'status': 'error',
@@ -172,17 +165,12 @@ class SocketHandler:
                     })
                     return
                 
-                # Create and store the message with encryption metadata
+                # Create and store the message
                 message = Message(
                     sender_id=sender_id,
                     room_id=room_id,
                     content=content,
-                    message_type=message_type,
-                    is_encrypted=is_encrypted,
-                    encryption_type=encryption_type,
-                    encrypted_aes_key=encrypted_aes_key,
-                    iv=iv,
-                    key_version=key_version
+                    message_type=message_type
                 )
                 
                 db.session.add(message)
@@ -205,7 +193,7 @@ class SocketHandler:
                 if not broadcast_success:
                     print(f"Warning: Failed to broadcast message {message.id} to room {room_id}")
                 
-                print(f"Message {message.id} sent to room {room_id} by user {sender_id} (encrypted: {is_encrypted})")
+                print(f"Message {message.id} sent to room {room_id} by user {sender_id}")
                 
             except Exception as e:
                 print(f"Error in send_message: {str(e)}")
